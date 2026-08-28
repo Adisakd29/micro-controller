@@ -9,7 +9,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "board.json");
-const TEACHER_PIN = process.env.TEACHER_PIN || "";
+const PIN_FROM_ENV = !!process.env.TEACHER_PIN;
+const TEACHER_PIN = process.env.TEACHER_PIN || String(Math.floor(100000 + Math.random() * 900000));
 const WS_IDS = ["A1","A2","A3","A4","A5","A6","A7","A8","A9","A10","A11",
                 "C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"];
 
@@ -78,16 +79,24 @@ function publicTeam(r, t) {
     .map((u) => ({ sid: u.sid, name: u.name, photo: u.photo || "" }));
   return { id: t.id, code: t.code, name: t.name, members, progress: t.progress, updated: t.updated };
 }
-function snapshot(r) {
-  return {
-    teams: Object.values(r.teams)
-      .map((t) => publicTeam(r, t))
-      .sort((a, b) => String(a.name).localeCompare(String(b.name), "th")),
-    verdicts: r.verdicts,
-    ranking: ranking(r),
-    mods: r.mods || {},
-    at: Date.now(),
-  };
+function snapshot(r, viewer = {}) {
+  const teams = Object.values(r.teams)
+    .map((t) => {
+      const full = publicTeam(r, t);
+      if (viewer.isTeacher || viewer.teamId === t.id) return full;
+      // ทีมอื่นเห็นได้แค่ชื่อกับสมาชิก ไม่เห็นคำตอบหรือความคืบหน้า และไม่เห็นรหัสทีม
+      return { id: full.id, name: full.name, members: full.members, progress: {}, updated: full.updated };
+    })
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), "th"));
+  return { teams, verdicts: r.verdicts, ranking: ranking(r), mods: r.mods || {}, at: Date.now() };
+}
+
+// ดูว่าคนที่ขอข้อมูลเป็นใคร เพื่อกรองข้อมูลให้ตรงสิทธิ์
+function viewerOf(r, { pin, token, sid }) {
+  if (pin && String(pin) === TEACHER_PIN) return { isTeacher: true };
+  const u = r.users[cleanSid(sid)];
+  if (u && token && u.token === token) return { teamId: u.teamId || "" };
+  return {};
 }
 
 /* ---------- SSE ---------- */
@@ -96,9 +105,13 @@ const clients = new Map(); // roomId -> Set(res)
 function broadcast(roomId) {
   const set = clients.get(roomId);
   if (!set || !set.size) return;
-  const payload = "data: " + JSON.stringify(snapshot(db.rooms[roomId])) + "\n\n";
+  const r = db.rooms[roomId];
+  const cache = new Map(); // ทีมเดียวกันใช้ payload ร่วมกันได้
   for (const res of set) {
-    try { res.write(payload); } catch { /* ปิดไปแล้ว */ }
+    const v = res._viewer || {};
+    const key = v.isTeacher ? "teacher" : "team:" + (v.teamId || "");
+    if (!cache.has(key)) cache.set(key, "data: " + JSON.stringify(snapshot(r, v)) + "\n\n");
+    try { res.write(cache.get(key)); } catch { /* ปิดไปแล้ว */ }
   }
 }
 
@@ -143,15 +156,26 @@ app.use(express.static(PUBLIC, {
 
 app.get("/healthz", (_req, res) => res.type("text").send("ok"));
 
-app.get("/api/config", (_req, res) => res.json({ pinRequired: !!TEACHER_PIN }));
+app.get("/api/config", (_req, res) => res.json({ pinRequired: true, pinFromEnv: PIN_FROM_ENV }));
+
+// ตรวจรหัสครูที่ฝั่งเซิร์ฟเวอร์ก่อน จึงจะเปิดแผงครูให้ได้
+app.post("/api/teacher/auth", (req, res) => {
+  if (String(req.body.pin || "") !== TEACHER_PIN) {
+    return res.status(401).json({ error: "รหัสครูไม่ถูกต้อง" });
+  }
+  res.json({ ok: true });
+});
 
 app.get("/api/state", (req, res) => {
   const { data } = room(req.query.room);
-  res.json(snapshot(data));
+  const v = viewerOf(data, { pin: req.query.pin, token: req.get("x-auth") || req.query.token, sid: req.get("x-sid") || req.query.sid });
+  res.json(snapshot(data, v));
 });
 
 app.get("/api/stream", (req, res) => {
   const { id, data } = room(req.query.room);
+  const viewer = viewerOf(data, { pin: req.query.pin, token: req.query.token, sid: req.query.sid });
+  res._viewer = viewer;
   res.set({
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache, no-transform",
@@ -160,7 +184,7 @@ app.get("/api/stream", (req, res) => {
   });
   res.flushHeaders?.();
   res.write("retry: 3000\n\n");
-  res.write("data: " + JSON.stringify(snapshot(data)) + "\n\n");
+  res.write("data: " + JSON.stringify(snapshot(data, viewer)) + "\n\n");
 
   if (!clients.has(id)) clients.set(id, new Set());
   clients.get(id).add(res);
@@ -331,7 +355,6 @@ app.post("/api/progress", (req, res) => {
 
 /* ---------- ครู ---------- */
 function requirePin(req, res) {
-  if (!TEACHER_PIN) return true;
   if (String(req.body.pin || req.query.pin || "") === TEACHER_PIN) return true;
   res.status(401).json({ error: "รหัสครูไม่ถูกต้อง" });
   return false;
@@ -429,5 +452,10 @@ app.post("/api/resetpw", (req, res) => {
 app.listen(PORT, () => {
   console.log(`กระดานแข่งใบงานทำงานที่พอร์ต ${PORT}`);
   console.log(`เก็บข้อมูลที่ ${DATA_FILE}`);
-  console.log(TEACHER_PIN ? "เปิดใช้รหัสครูแล้ว" : "ยังไม่ได้ตั้งรหัสครู ใครก็เข้าแผงครูได้");
+  if (PIN_FROM_ENV) console.log("รหัสครูมาจากตัวแปร TEACHER_PIN");
+  else {
+    console.log("!! ยังไม่ได้ตั้งตัวแปร TEACHER_PIN");
+    console.log("!! ระบบสุ่มรหัสครูชั่วคราวให้แล้วคือ " + TEACHER_PIN);
+    console.log("!! รหัสนี้จะเปลี่ยนทุกครั้งที่เซิร์ฟเวอร์รีสตาร์ต ควรตั้ง TEACHER_PIN เองใน Variables");
+  }
 });
