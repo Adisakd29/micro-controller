@@ -37,11 +37,9 @@
       <h2>ตั้งชื่อทีมก่อนเริ่มแข่ง</h2>
       <p class="sub">ใช้อุปกรณ์เครื่องเดียวต่อหนึ่งทีม ทุกคนในทีมดูจอเดียวกัน</p>
       <label class="fld"><span>ชื่อทีม</span><input type="text" id="inName" placeholder="เช่น ทีมสายฟ้า" maxlength="28" autocomplete="off"></label>
-      <div class="row">
-        <label class="fld grow"><span>สมาชิกคนที่ 1</span><input type="text" id="inM1" maxlength="24" autocomplete="off"></label>
-        <label class="fld grow"><span>สมาชิกคนที่ 2</span><input type="text" id="inM2" maxlength="24" autocomplete="off"></label>
-        <label class="fld grow"><span>สมาชิกคนที่ 3</span><input type="text" id="inM3" maxlength="24" autocomplete="off"></label>
-      </div>
+      <p class="eyebrow" style="margin-top:18px">สมาชิก 3 คน</p>
+      <p class="sub">แตะวงกลมเพื่อถ่ายรูปหรือเลือกรูปจากเครื่อง รูปจะถูกย่อให้เล็กก่อนส่ง และแสดงบนกระดานของครู</p>
+      <div class="members" id="memberGrid"></div>
       <button class="btn" id="btnJoin">เข้าร่วมการแข่งขัน</button>
     </div>
 
@@ -50,10 +48,12 @@
         <div style="min-width:0">
           <p class="eyebrow">ทีมของคุณ</p>
           <h2 id="tName">—</h2>
+          <div class="facerow" id="tFaces"></div>
           <p class="sub" id="tMem" style="margin-bottom:0">—</p>
         </div>
         <div class="row">
           <span class="pill mono" id="tStars">⭐ 0</span>
+          <button class="btn ghost sm" id="btnEdit">แก้ไขทีม</button>
           <button class="btn ghost sm" id="btnLeave">ออกจากทีม</button>
         </div>
       </div>

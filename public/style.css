@@ -189,3 +189,44 @@ table.board td.rank{font-family:"IBM Plex Mono",monospace;font-weight:600;width:
 .awards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
 .award{border:1px solid var(--rule);border-radius:9px;padding:12px 13px;background:#F7F9FB}
 .award b{display:block;font-family:Anuphan,sans-serif;font-size:13.5px;margin-bottom:6px}
+
+/* ---- รูปสมาชิกทีม ---- */
+.members{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+@media (max-width:520px){.members{grid-template-columns:1fr}}
+.mcard{border:1px solid var(--rule);border-radius:10px;padding:14px;background:#F7F9FB;text-align:center}
+.avatar{
+  width:84px;height:84px;border-radius:99px;margin:0 auto 10px;display:grid;place-items:center;
+  border:2px dashed #B6C1CC;background:#fff;cursor:pointer;overflow:hidden;position:relative;
+  font-size:11.5px;color:var(--faint);line-height:1.3;padding:6px;font-family:Anuphan,sans-serif;
+}
+.avatar:hover{border-color:var(--signal);color:var(--signal)}
+.avatar:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+.avatar img{width:100%;height:100%;object-fit:cover;border-radius:99px}
+.avatar[data-has="1"]{border-style:solid;border-color:var(--ok)}
+.mcard input[type=text]{text-align:center;font-size:13.5px;padding:8px 10px}
+.mcard .rm{margin-top:7px;font-size:11.5px;color:var(--warn);background:none;border:0;cursor:pointer;font-family:inherit;padding:2px 6px}
+.mcard .rm:focus-visible{outline:2px solid var(--warn);outline-offset:1px}
+
+.facerow{display:flex;gap:-6px;margin:8px 0 6px}
+.facerow img,.facerow span{
+  width:34px;height:34px;border-radius:99px;object-fit:cover;border:2px solid #fff;
+  box-shadow:0 0 0 1px var(--rule);margin-right:-8px;background:#E3E9EF;
+  display:grid;place-items:center;font-size:12px;color:var(--muted);font-weight:600;
+}
+
+.tile .faces{display:flex;margin:0 0 10px}
+.tile .faces img,.tile .faces span{
+  width:26px;height:26px;border-radius:99px;object-fit:cover;border:2px solid var(--panel);
+  margin-right:-7px;background:#2A3138;display:grid;place-items:center;font-size:10px;color:#8FA0B0;
+}
+
+/* ---- ส่วนการประกอบ ---- */
+.asmwrap{display:grid;grid-template-columns:250px 1fr;gap:18px;align-items:start}
+@media (max-width:640px){.asmwrap{grid-template-columns:1fr}}
+.asmimg{border:1px solid var(--rule);border-radius:10px;background:#fff;padding:8px}
+.asmimg img{width:100%;display:block;border-radius:6px}
+.asmimg figcaption{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--faint);text-align:center;margin-top:6px;letter-spacing:.05em}
+.pagechip{
+  display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:12px;
+  background:var(--panel);color:#FFD9D5;border-radius:6px;padding:3px 9px;margin-bottom:10px;
+}

@@ -22,7 +22,8 @@ const LS = {
 
 const S = {
   role: "team",
-  me: null,          // {id,name,members} ของเครื่องนี้
+  me: null,          // {id,name,members,photos} ของเครื่องนี้
+  draft: { names: ["", "", ""], photos: ["", "", ""] },
   local: {},         // progress ที่กำลังแก้อยู่ ยังไม่ถูกเซิร์ฟเวอร์เขียนทับ
   teams: [],
   verdicts: {},
@@ -33,6 +34,7 @@ const S = {
   pinRequired: false,
   saveT: null,
 };
+let editing = false;
 
 /* ---------- โลโก้ LED ---------- */
 (function () {
@@ -48,6 +50,92 @@ function setSync(ok, msg) {
 }
 function alertBox(kind, html) {
   $("#alerts").innerHTML = html ? '<div class="banner ' + kind + '">' + html + "</div>" : "";
+}
+
+
+/* ---------- รูปสมาชิก ---------- */
+const AVATAR_PX = 220;
+function shrinkImage(file) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/")) return reject(new Error("ไฟล์นี้ไม่ใช่รูปภาพ"));
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error("อ่านไฟล์ไม่สำเร็จ"));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("เปิดรูปนี้ไม่ได้"));
+      img.onload = () => {
+        const side = Math.min(img.width, img.height);
+        const cv = document.createElement("canvas");
+        cv.width = cv.height = AVATAR_PX;
+        const cx = cv.getContext("2d");
+        cx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, AVATAR_PX, AVATAR_PX);
+        resolve(cv.toDataURL("image/jpeg", 0.72));
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+function renderMemberGrid() {
+  const g = $("#memberGrid");
+  if (!g) return;
+  g.innerHTML = "";
+  for (let i = 0; i < 3; i++) {
+    const card = el("div", "mcard");
+    const av = el("button", "avatar");
+    av.type = "button";
+    av.setAttribute("aria-label", "เพิ่มรูปสมาชิกคนที่ " + (i + 1));
+    const photo = S.draft.photos[i];
+    if (photo) { av.dataset.has = "1"; const im = el("img"); im.src = photo; im.alt = ""; av.appendChild(im); }
+    else av.textContent = "แตะเพื่อใส่รูป";
+    const file = el("input");
+    file.type = "file"; file.accept = "image/*"; file.capture = "user"; file.style.display = "none";
+    file.onchange = async () => {
+      const f = file.files && file.files[0];
+      if (!f) return;
+      try { S.draft.photos[i] = await shrinkImage(f); alertBox(""); renderMemberGrid(); pushTeam(); }
+      catch (e) { alertBox("err", "ใส่รูปไม่สำเร็จ: " + esc(e.message)); }
+      file.value = "";
+    };
+    av.onclick = () => file.click();
+    card.appendChild(av); card.appendChild(file);
+
+    const name = el("input");
+    name.type = "text"; name.maxLength = 24; name.placeholder = "ชื่อคนที่ " + (i + 1);
+    name.value = S.draft.names[i] || "";
+    name.oninput = () => { S.draft.names[i] = name.value; };
+    name.onblur = () => { if (S.me) pushTeam(); };
+    card.appendChild(name);
+
+    if (photo) {
+      const rm = el("button", "rm", "เอารูปออก");
+      rm.type = "button";
+      rm.onclick = () => { S.draft.photos[i] = ""; renderMemberGrid(); if (S.me) pushTeam(); };
+      card.appendChild(rm);
+    }
+    g.appendChild(card);
+  }
+}
+
+function faces(list, photos, cls) {
+  const w = el("div", cls);
+  for (let i = 0; i < 3; i++) {
+    const nm = (list && list[i]) || "";
+    const ph = (photos && photos[i]) || "";
+    if (!nm && !ph) continue;
+    if (ph) { const im = el("img"); im.src = ph; im.alt = nm; im.title = nm; w.appendChild(im); }
+    else { const sp = el("span", null, nm.slice(0, 1) || "?"); sp.title = nm; w.appendChild(sp); }
+  }
+  return w;
+}
+
+async function pushTeam() {
+  if (!S.me) return;
+  S.me.members = S.draft.names.map((n) => n.trim());
+  S.me.photos = S.draft.photos.slice();
+  LS.set("me", S.me);
+  try { await api("team", S.me); } catch (e) { alertBox("err", "บันทึกข้อมูลทีมไม่สำเร็จ: " + esc(e.message)); }
 }
 
 /* ---------- เรียก API ---------- */
@@ -98,17 +186,14 @@ $("#selWsT").onchange = (e) => { S.wsT = e.target.value; renderTeacher(); };
 $("#btnJoin").onclick = async () => {
   const name = $("#inName").value.trim();
   if (!name) { alertBox("err", "ใส่ชื่อทีมก่อนจึงจะเข้าร่วมได้"); $("#inName").focus(); return; }
-  const members = [$("#inM1").value, $("#inM2").value, $("#inM3").value].map((v) => v.trim()).filter(Boolean);
   const id = LS.get("teamId") || "t" + Math.random().toString(36).slice(2, 8);
-  S.me = { id, name, members };
+  S.me = { id, name, members: S.draft.names.map((n) => n.trim()), photos: S.draft.photos.slice() };
   LS.set("teamId", id);
   LS.set("me", S.me);
-  try {
-    await api("team", S.me);
-    alertBox("");
-  } catch (e) {
-    alertBox("err", "เข้าร่วมไม่สำเร็จ: " + esc(e.message));
-  }
+  editing = false;
+  try { await api("team", S.me); alertBox(""); }
+  catch (e) { alertBox("err", "บันทึกไม่สำเร็จ: " + esc(e.message)); }
+  render();
 };
 
 $("#btnLeave").onclick = async () => {
@@ -116,6 +201,10 @@ $("#btnLeave").onclick = async () => {
   try { await api("leave", { id: S.me.id }); } catch {}
   LS.del("me"); LS.del("teamId");
   S.me = null; S.local = {};
+  S.draft = { names: ["", "", ""], photos: ["", "", ""] };
+  editing = false;
+  $("#inName").value = "";
+  renderMemberGrid();
   render();
 };
 
@@ -128,8 +217,8 @@ function prog() {
     const srv = serverTeam();
     const p = srv && srv.progress && srv.progress[wid];
     S.local[wid] = p
-      ? { c: p.c.slice(), bonus: p.bonus, start: p.start, flagAt: p.flagAt, ans: (p.ans || ["", ""]).slice() }
-      : { c: [false, false, false], bonus: false, start: 0, flagAt: 0, ans: ["", ""] };
+      ? { c: p.c.slice(), bonus: p.bonus, start: p.start, flagAt: p.flagAt, ans: (p.ans || ["", ""]).slice(), asm: (p.asm || []).slice() }
+      : { c: [false, false, false], bonus: false, start: 0, flagAt: 0, ans: ["", ""], asm: [] };
   }
   return S.local[wid];
 }
@@ -140,15 +229,29 @@ function totalStars(v) {
   return n;
 }
 
+$("#btnEdit").onclick = () => {
+  editing = true;
+  $("#inName").value = S.me ? S.me.name : "";
+  renderMemberGrid();
+  render();
+  $("#joinCard").scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
 function renderTeam() {
   const joined = !!S.me;
-  $("#joinCard").classList.toggle("hide", joined);
+  $("#joinCard").classList.toggle("hide", joined && !editing);
+  $("#btnJoin").textContent = joined ? "บันทึกการแก้ไข" : "เข้าร่วมการแข่งขัน";
+  $("#joinCard").querySelector("h2").textContent = joined ? "แก้ไขชื่อทีมและสมาชิก" : "ตั้งชื่อทีมก่อนเริ่มแข่ง";
   $("#teamHead").classList.toggle("hide", !joined);
   $("#wsCard").classList.toggle("hide", !joined);
   $("#rankCard").classList.toggle("hide", !joined);
   if (!joined) return;
   $("#tName").textContent = S.me.name;
-  $("#tMem").textContent = S.me.members.length ? S.me.members.join(" · ") : "ยังไม่ได้ใส่ชื่อสมาชิก";
+  const fr = $("#tFaces");
+  fr.replaceWith(faces(S.me.members, S.me.photos, "facerow"));
+  const nf = document.querySelector("#teamHead .facerow"); if (nf) nf.id = "tFaces";
+  const named = (S.me.members || []).filter(Boolean);
+  $("#tMem").textContent = named.length ? named.join(" · ") : "ยังไม่ได้ใส่ชื่อสมาชิก";
   $("#selWs").value = S.ws;
   $("#tStars").textContent = "⭐ " + totalStars(myVerdict());
   renderWorksheet();
@@ -192,7 +295,33 @@ function renderWorksheet() {
   c.appendChild(el("p", null, w.mod));
   c.appendChild(el("h3", null, "แบ่งงานในทีม"));
   c.appendChild(el("p", null, w.roles));
-  c.appendChild(el("h3", null, "ขั้นตอน"));
+  if (w.asm) {
+    c.appendChild(el("h3", null, "ประกอบชิ้นส่วน"));
+    const wrap = el("div", "asmwrap");
+    const fig = el("figure", "asmimg");
+    fig.style.margin = "0";
+    const im = el("img");
+    im.src = w.asm.img; im.alt = "ชิ้นงาน " + w.id + " ที่ประกอบเสร็จแล้ว"; im.loading = "lazy";
+    fig.appendChild(im);
+    fig.appendChild(el("figcaption", null, "หน้าตาชิ้นงานเมื่อประกอบเสร็จ"));
+    wrap.appendChild(fig);
+
+    const right = el("div");
+    right.appendChild(el("span", "pagechip", "คู่มือ Assembly Steps หน้า " + w.asm.from + "–" + w.asm.to + " · " + w.asm.pages + " หน้า"));
+    right.appendChild(el("p", "sub", "แตะติ๊กเมื่อประกอบครบแต่ละช่วง จะได้รู้ว่าเหลืออีกเท่าไหร่ และครูเห็นความคืบหน้าของทุกทีมพร้อมกัน"));
+    if (!p.asm) p.asm = [];
+    w.asm.ph.forEach((rg, i) => {
+      const b = el("button", "tick");
+      b.dataset.on = p.asm[i] ? "1" : "0";
+      b.innerHTML = '<span class="box"></span><span class="txt"><b>ช่วงที่ ' + (i + 1) + "</b>ประกอบตามคู่มือหน้า " + rg[0] + " ถึง " + rg[1] + "</span>";
+      b.onclick = () => { p.asm[i] = !p.asm[i]; save(); renderWorksheet(); };
+      right.appendChild(b);
+    });
+    wrap.appendChild(right);
+    c.appendChild(wrap);
+  }
+
+  c.appendChild(el("h3", null, "ขั้นตอนการเขียนโปรแกรม"));
   const ol = el("ol", "steps"); w.steps.forEach((s) => ol.appendChild(el("li", null, s))); c.appendChild(ol);
 
   c.appendChild(el("h3", null, "เกณฑ์ผ่านด่าน — แตะเพื่อติ๊ก"));
@@ -310,7 +439,11 @@ function renderTeacher() {
       if (r.v && r.v.status === "pass") {
         meta.textContent = "ผ่านแล้ว · อันดับ " + r.v.rank + " · ⭐" + (r.v.stars || 2) + " · ผ่านเมื่อ " + hhmm(r.v.at);
       } else {
-        meta.textContent = "ยกป้าย " + hhmm(r.p.flagAt) + " · รอมาแล้ว " + elapsed(r.p.flagAt) + (r.p.bonus ? " · แจ้งว่าทำ Bonus แล้ว" : "");
+        const done = (r.p.asm || []).filter(Boolean).length;
+        const tot = (WSMAP[wid].asm && WSMAP[wid].asm.ph.length) || 0;
+        meta.textContent = "ยกป้าย " + hhmm(r.p.flagAt) + " · รอมาแล้ว " + elapsed(r.p.flagAt)
+          + (tot ? " · ประกอบ " + done + "/" + tot + " ช่วง" : "")
+          + (r.p.bonus ? " · แจ้งว่าทำ Bonus แล้ว" : "");
       }
       info.appendChild(meta);
       d.appendChild(info);
@@ -347,7 +480,8 @@ function renderTeacher() {
       const v = S.verdicts[t.id] || {};
       const tile = el("div", "tile");
       tile.appendChild(el("p", "tname", t.name));
-      tile.appendChild(el("p", "tmem", (t.members || []).join(" · ") || "—"));
+      tile.appendChild(faces(t.members, t.photos, "faces"));
+      tile.appendChild(el("p", "tmem", (t.members || []).filter(Boolean).join(" · ") || "—"));
       const m = el("div", "matrix");
       for (let i = 0; i < 25; i++) {
         const dot = el("i");
@@ -440,7 +574,7 @@ function applyState(st) {
     for (const wid in mine.progress) {
       if (wid === S.ws && document.activeElement && document.activeElement.dataset.ans != null) continue;
       const p = mine.progress[wid];
-      S.local[wid] = { c: p.c.slice(), bonus: p.bonus, start: p.start, flagAt: p.flagAt, ans: (p.ans || ["", ""]).slice() };
+      S.local[wid] = { c: p.c.slice(), bonus: p.bonus, start: p.start, flagAt: p.flagAt, ans: (p.ans || ["", ""]).slice(), asm: (p.asm || []).slice() };
     }
   }
   render();
@@ -474,7 +608,12 @@ setInterval(() => {
     S.pinRequired = !!cfg.pinRequired;
   } catch {}
   const me = LS.get("me");
-  if (me && me.id) S.me = me;
+  if (me && me.id) {
+    S.me = me;
+    S.draft.names = [0, 1, 2].map((i) => (me.members && me.members[i]) || "");
+    S.draft.photos = [0, 1, 2].map((i) => (me.photos && me.photos[i]) || "");
+  }
+  renderMemberGrid();
   const role = LS.get("role");
   S.role = role === "teacher" ? "teacher" : "team";
   $("#btnTeam").setAttribute("aria-pressed", S.role === "team");
