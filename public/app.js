@@ -208,15 +208,25 @@ async function api(path, body) {
 }
 
 /* ---------- สลับมุมมอง ---------- */
+async function checkPin(pin) {
+  try { await api("teacher/auth", { pin }); return true; }
+  catch { return false; }
+}
 $("#btnTeam").onclick = () => setRole("team");
 $("#btnTeacher").onclick = () => setRole("teacher");
 $("#btnScore").onclick = () => setRole("score");
 async function setRole(r) {
-  if (r === "teacher" && S.pinRequired && !S.pin) {
-    const pin = window.prompt ? window.prompt("ใส่รหัสครู") : "";
-    if (pin == null) return;
-    S.pin = String(pin).trim();
-    LS.set("pin", S.pin);
+  if (r === "teacher") {
+    let ok = false;
+    if (S.pin) ok = await checkPin(S.pin);
+    while (!ok) {
+      const pin = window.prompt("ใส่รหัสครู");
+      if (pin == null) return;
+      ok = await checkPin(String(pin).trim());
+      if (ok) { S.pin = String(pin).trim(); LS.set("pin", S.pin); }
+      else alertBox("err", "รหัสครูไม่ถูกต้อง");
+    }
+    alertBox("");
   }
   S.role = r;
   $("#btnTeam").setAttribute("aria-pressed", r === "team");
@@ -226,6 +236,7 @@ async function setRole(r) {
   $("#viewTeacher").classList.toggle("hide", r !== "teacher");
   $("#viewScore").classList.toggle("hide", r !== "score");
   LS.set("role", r);
+  connect();
   render();
 }
 
@@ -280,6 +291,7 @@ $("#btnAuth").onclick = async () => {
     LS.set("auth", { token: r.token, sid: r.user.sid });
     $("#inPw").value = "";
     alertBox("");
+    connect();
     render();
   } catch (e) { alertBox("err", esc(e.message)); }
 };
@@ -290,6 +302,7 @@ $("#btnAuth").onclick = async () => {
 $("#btnLogout").onclick = () => {
   S.token = ""; S.user = null;
   LS.del("auth");
+  connect();
   render();
 };
 
@@ -656,7 +669,8 @@ async function verdict(teamId, ws, extra) {
   } catch (e) {
     if (String(e.message).includes("รหัสครู")) {
       S.pin = ""; LS.del("pin");
-      alertBox("err", "รหัสครูไม่ถูกต้อง กดปุ่มครูอีกครั้งเพื่อใส่ใหม่");
+      alertBox("err", "รหัสครูไม่ถูกต้องแล้ว กลับไปหน้านักเรียน");
+      setRole("team");
     } else alertBox("err", esc(e.message));
   }
 }
@@ -807,7 +821,10 @@ function applyState(st) {
 let es = null;
 function connect() {
   if (es) es.close();
-  es = new EventSource("/api/stream?room=" + encodeURIComponent(ROOM));
+  const q = new URLSearchParams({ room: ROOM });
+  if (S.role === "teacher" && S.pin) q.set("pin", S.pin);
+  if (S.token && S.user) { q.set("token", S.token); q.set("sid", S.user.sid); }
+  es = new EventSource("/api/stream?" + q.toString());
   es.onopen = () => setSync(true, "เชื่อมต่อสด");
   es.onmessage = (ev) => {
     setSync(true, "อัปเดต " + hhmm(Date.now()));
@@ -852,7 +869,8 @@ function challenge(v) { return v ? esc(v) : '<span style="color:var(--faint)">�
 (async function init() {
   try {
     const cfg = await (await fetch("/api/config")).json();
-    S.pinRequired = !!cfg.pinRequired;
+    S.pinRequired = true;
+    S.pinFromEnv = !!cfg.pinFromEnv;
   } catch {}
   setAuthMode("login");
   const a = LS.get("auth");
