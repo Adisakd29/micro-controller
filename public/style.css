@@ -90,7 +90,7 @@ button.btn.sm{padding:7px 12px;font-size:13px;border-radius:7px}
 button.btn:disabled{opacity:.4;cursor:not-allowed}
 button.btn:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
 
-input[type=text],select,textarea{
+input[type=text],input[type=password],input[type=number],input[type=email],select,textarea{
   font-family:inherit;font-size:14.5px;color:var(--ink);
   border:1px solid var(--rule);border-radius:8px;padding:10px 12px;background:#fff;width:100%;
 }

@@ -6,7 +6,13 @@ const REJECT_COOLDOWN = 120000; // 2 นาที ตามกติกาใน
 const params = new URLSearchParams(location.search);
 const ROOM = (params.get("room") || "main").toLowerCase();
 
-const $ = (s) => document.querySelector(s);
+// ถ้าหา element ไม่เจอ ให้คืนตัวหลอกแทน สคริปต์จะได้ไม่ตายทั้งไฟล์
+const $ = (sel) => {
+  const n = document.querySelector(sel);
+  if (n) return n;
+  console.warn("ไม่พบ element", sel);
+  return document.createElement("div");
+};
 const el = (t, c, x) => { const n = document.createElement(t); if (c) n.className = c; if (x !== undefined) n.textContent = x; return n; };
 const esc = (s) => String(s).replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
 const hhmm = (t) => new Date(t).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -207,9 +213,9 @@ $("#btnTeacher").onclick = () => setRole("teacher");
 $("#btnScore").onclick = () => setRole("score");
 async function setRole(r) {
   if (r === "teacher" && S.pinRequired && !S.pin) {
-    const pin = prompt("ใส่รหัสครู");
-    if (pin === null) return;
-    S.pin = pin.trim();
+    const pin = window.prompt ? window.prompt("ใส่รหัสครู") : "";
+    if (pin == null) return;
+    S.pin = String(pin).trim();
     LS.set("pin", S.pin);
   }
   S.role = r;
@@ -324,9 +330,9 @@ $("#btnLeave").onclick = async () => {
 };
 $("#btnRename").onclick = async () => {
   const t = myTeam();
-  const name = prompt("ชื่อทีมใหม่", t ? t.name : "");
-  if (name === null) return;
-  try { await api("team/rename", { name: name.trim() }); }
+  const name = window.prompt("ชื่อทีมใหม่", t ? t.name : "");
+  if (name == null) return;
+  try { await api("team/rename", { name: String(name).trim() }); }
   catch (e) { alertBox("err", esc(e.message)); }
 };
 
@@ -573,8 +579,8 @@ function renderTeacher() {
         p3.onclick = () => verdict(r.t.id, wid, { status: "pass", stars: 3 });
         const no = el("button", "btn warn sm", "ยังไม่ผ่าน");
         no.onclick = () => {
-          const note = prompt("บอกทีมว่ายังขาดอะไร (ปล่อยว่างได้)");
-          if (note === null) return;
+          const note = window.prompt("บอกทีมว่ายังขาดอะไร (ปล่อยว่างได้)");
+          if (note == null) return;
           verdict(r.t.id, wid, { status: "fail", note });
         };
         acts.appendChild(p2); acts.appendChild(p3); acts.appendChild(no);
@@ -833,7 +839,7 @@ challenge(u.team) + '</td><td><button class="btn ghost sm" data-pw="' + esc(u.si
     $("#rosterBox").innerHTML = h + "</table>";
     $("#rosterBox").querySelectorAll("[data-pw]").forEach((b) => {
       b.onclick = async () => {
-        const pw = prompt("รหัสผ่านใหม่ของ " + b.dataset.pw + " (อย่างน้อย 4 ตัว)");
+        const pw = window.prompt("รหัสผ่านใหม่ของ " + b.dataset.pw + " (อย่างน้อย 4 ตัว)");
         if (!pw) return;
         try { await api("resetpw", { sid: b.dataset.pw, password: pw, pin: S.pin }); alertBox("info", "ตั้งรหัสใหม่ให้ " + esc(b.dataset.pw) + " แล้ว บอกเด็กว่า " + esc(pw)); }
         catch (e) { alertBox("err", esc(e.message)); }
