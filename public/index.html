@@ -1,1 +1,123 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>กระดานแข่งใบงาน · WOM Sensor Kit for micro:bit</title>
+<meta name="description" content="กระดานติ๊ก Checkpoint สดข้ามเครื่อง สำหรับการแข่งขันทำใบงาน WOM Sensor Kit บน micro:bit">
+<meta name="theme-color" content="#171C22">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23171C22'/%3E%3Cg fill='%23FF4A3D'%3E%3Crect x='7' y='7' width='5' height='5' rx='1'/%3E%3Crect x='20' y='7' width='5' height='5' rx='1'/%3E%3Crect x='7' y='20' width='18' height='5' rx='1'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="chipmark" id="chipmark"></div>
+      <div>
+        <h1>กระดานแข่งใบงาน</h1>
+        <p>WOM Sensor Kit · micro:bit</p>
+      </div>
+    </div>
+    <div class="row" style="gap:12px">
+      <span class="roomtag" id="roomtag">ห้อง main</span>
+      <div class="sync"><span class="dot bad" id="syncdot"></span><span id="synctxt">กำลังเชื่อมต่อ</span></div>
+      <div class="roleswitch">
+        <button id="btnTeam" aria-pressed="true">ทีมนักเรียน</button>
+        <button id="btnTeacher" aria-pressed="false">ครู</button>
+      </div>
+    </div>
+  </header>
 
+  <div id="alerts"></div>
+
+  <section id="viewTeam">
+    <div class="card" id="joinCard">
+      <p class="eyebrow">เริ่มต้น</p>
+      <h2>ตั้งชื่อทีมก่อนเริ่มแข่ง</h2>
+      <p class="sub">ใช้อุปกรณ์เครื่องเดียวต่อหนึ่งทีม ทุกคนในทีมดูจอเดียวกัน</p>
+      <label class="fld"><span>ชื่อทีม</span><input type="text" id="inName" placeholder="เช่น ทีมสายฟ้า" maxlength="28" autocomplete="off"></label>
+      <div class="row">
+        <label class="fld grow"><span>สมาชิกคนที่ 1</span><input type="text" id="inM1" maxlength="24" autocomplete="off"></label>
+        <label class="fld grow"><span>สมาชิกคนที่ 2</span><input type="text" id="inM2" maxlength="24" autocomplete="off"></label>
+        <label class="fld grow"><span>สมาชิกคนที่ 3</span><input type="text" id="inM3" maxlength="24" autocomplete="off"></label>
+      </div>
+      <button class="btn" id="btnJoin">เข้าร่วมการแข่งขัน</button>
+    </div>
+
+    <div class="card hide" id="teamHead">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div style="min-width:0">
+          <p class="eyebrow">ทีมของคุณ</p>
+          <h2 id="tName">—</h2>
+          <p class="sub" id="tMem" style="margin-bottom:0">—</p>
+        </div>
+        <div class="row">
+          <span class="pill mono" id="tStars">⭐ 0</span>
+          <button class="btn ghost sm" id="btnLeave">ออกจากทีม</button>
+        </div>
+      </div>
+      <div class="hr"></div>
+      <label class="fld" style="margin-bottom:0"><span>เลือกใบงานที่กำลังทำ</span><select id="selWs"></select></label>
+    </div>
+
+    <div class="card hide" id="wsCard"></div>
+
+    <div class="card hide" id="rankCard">
+      <p class="eyebrow">สดจากกระดานครู</p>
+      <h2 id="rankTitle">อันดับของใบงานนี้</h2>
+      <div id="rankBody"></div>
+    </div>
+  </section>
+
+  <section id="viewTeacher" class="hide">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div>
+          <p class="eyebrow">แผงควบคุมครู</p>
+          <h2>คิวรอตรวจ</h2>
+          <p class="sub" style="margin-bottom:0">ทีมที่กดยกป้ายจะเรียงตามเวลาที่กดโดยอัตโนมัติ</p>
+        </div>
+        <div class="row">
+          <select id="selWsT" style="width:auto;min-width:230px"></select>
+        </div>
+      </div>
+      <div class="hr"></div>
+      <div id="queue"></div>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">ความคืบหน้ารวมทุกใบงาน</p>
+      <h2>กระดานทีม</h2>
+      <p class="sub">แต่ละจุดคือหนึ่งใบงาน เรียงจาก A1 ถึง A11 แล้วต่อด้วย C1 ถึง C10</p>
+      <div class="tiles" id="tiles"></div>
+      <div class="legend">
+        <span><i style="background:var(--led-on)"></i>ผ่านแล้ว</span>
+        <span><i style="background:var(--led-bonus)"></i>ผ่าน + ทำ Bonus สำเร็จ</span>
+        <span><i style="background:var(--led-wait)"></i>ยกป้ายรอตรวจ</span>
+        <span><i style="background:var(--led-off)"></i>ยังไม่ผ่าน</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">สรุปคาบ</p>
+      <h2>ตารางคะแนนรวม</h2>
+      <p class="sub">รวมทุกใบงานที่ตรวจผ่านแล้วในห้องนี้</p>
+      <div id="summary"></div>
+      <div class="hr"></div>
+      <button class="btn ghost sm" id="btnCsv">ดาวน์โหลดเป็นไฟล์ CSV</button>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">อันตราย</p>
+      <h2>ล้างข้อมูลการแข่งขัน</h2>
+      <p class="sub">ลบทุกทีมและทุกผลตรวจของห้องนี้อย่างถาวร ใช้เมื่อจะเริ่มคาบใหม่กับนักเรียนอีกกลุ่ม</p>
+      <button class="btn warn sm" id="btnReset">ล้างข้อมูลห้องนี้</button>
+    </div>
+  </section>
+</div>
+
+<script src="/worksheets.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
