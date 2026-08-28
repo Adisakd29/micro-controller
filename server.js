@@ -81,7 +81,7 @@ function broadcast(roomId) {
 /* ---------- app ---------- */
 const app = express();
 app.disable("x-powered-by");
-app.use(express.json({ limit: "256kb" }));
+app.use(express.json({ limit: "3mb" }));
 app.use(express.static(path.join(__dirname, "public"), { maxAge: "1h" }));
 
 app.get("/healthz", (_req, res) => res.type("text").send("ok"));
@@ -123,7 +123,15 @@ app.post("/api/team", (req, res) => {
   if (!teamId || !name) return res.status(400).json({ error: "ต้องมีรหัสทีมและชื่อทีม" });
 
   const members = Array.isArray(req.body.members)
-    ? req.body.members.map((m) => String(m).trim().slice(0, 24)).filter(Boolean).slice(0, 3)
+    ? req.body.members.map((m) => String(m).trim().slice(0, 24)).slice(0, 3)
+    : [];
+
+  // รูปสมาชิก: data URL ของ JPEG ที่ย่อขนาดมาจากเบราว์เซอร์แล้ว
+  const photos = Array.isArray(req.body.photos)
+    ? req.body.photos.slice(0, 3).map((p) => {
+        const v = typeof p === "string" ? p : "";
+        return /^data:image\/(jpeg|png|webp);base64,/.test(v) && v.length <= 260000 ? v : "";
+      })
     : [];
 
   const prev = data.teams[teamId];
@@ -131,6 +139,7 @@ app.post("/api/team", (req, res) => {
     id: teamId,
     name,
     members,
+    photos: photos.length ? photos : prev?.photos || [],
     progress: prev?.progress || {},
     updated: Date.now(),
   };
@@ -151,6 +160,7 @@ app.post("/api/progress", (req, res) => {
     bonus: !!p.bonus,
     start: Number(p.start) || 0,
     flagAt: Number(p.flagAt) || 0,
+    asm: Array.isArray(p.asm) ? p.asm.slice(0, 6).map(Boolean) : [],
     ans: Array.isArray(p.ans) ? p.ans.slice(0, 2).map((a) => String(a).slice(0, 1200)) : ["", ""],
   };
   team.updated = Date.now();
