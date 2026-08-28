@@ -106,7 +106,40 @@ function broadcast(roomId) {
 const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "3mb" }));
-app.use(express.static(path.join(__dirname, "public"), { maxAge: "1h" }));
+/* ---------- กันแคชค้างหลัง deploy ---------- */
+const PUBLIC = path.join(__dirname, "public");
+const BUILD = (() => {
+  const h = crypto.createHash("sha1");
+  for (const f of ["index.html", "app.js", "style.css", "worksheets.js"]) {
+    try {
+      const st = fs.statSync(path.join(PUBLIC, f));
+      h.update(f + st.size + st.mtimeMs);
+    } catch { h.update(f); }
+  }
+  return h.digest("hex").slice(0, 10);
+})();
+
+function sendIndex(_req, res) {
+  let html;
+  try { html = fs.readFileSync(path.join(PUBLIC, "index.html"), "utf8"); }
+  catch { return res.status(500).send("ไม่พบหน้าเว็บ"); }
+  res.set("Cache-Control", "no-store, must-revalidate");
+  res.type("html").send(html.replace(/__BUILD__/g, BUILD));
+}
+app.get("/", sendIndex);
+app.get("/index.html", sendIndex);
+
+app.use(express.static(PUBLIC, {
+  etag: true,
+  setHeaders(res, filePath) {
+    if (/\.(js|css|html)$/.test(filePath)) {
+      // มี ?v= ต่อท้ายอยู่แล้ว จึงแคชยาวได้ แต่ถ้าเรียกตรงต้องไม่แคช
+      res.set("Cache-Control", "no-cache");
+    } else {
+      res.set("Cache-Control", "public, max-age=2592000, immutable");
+    }
+  },
+}));
 
 app.get("/healthz", (_req, res) => res.type("text").send("ok"));
 
