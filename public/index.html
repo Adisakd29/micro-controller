@@ -33,28 +33,64 @@
   <div id="alerts"></div>
 
   <section id="viewTeam">
-    <div class="card" id="joinCard">
-      <p class="eyebrow">เริ่มต้น</p>
-      <h2>ตั้งชื่อทีมก่อนเริ่มแข่ง</h2>
-      <p class="sub">ใช้อุปกรณ์เครื่องเดียวต่อหนึ่งทีม ทุกคนในทีมดูจอเดียวกัน</p>
-      <label class="fld"><span>ชื่อทีม</span><input type="text" id="inName" placeholder="เช่น ทีมสายฟ้า" maxlength="28" autocomplete="off"></label>
-      <p class="eyebrow" style="margin-top:18px">สมาชิก 3 คน</p>
-      <p class="sub">แตะวงกลมเพื่อถ่ายรูปหรือเลือกรูปจากเครื่อง รูปจะถูกย่อให้เล็กก่อนส่ง และแสดงบนกระดานของครู</p>
-      <div class="members" id="memberGrid"></div>
-      <button class="btn" id="btnJoin">เข้าร่วมการแข่งขัน</button>
+    <div class="card" id="authCard">
+      <p class="eyebrow">เข้าสู่ระบบ</p>
+      <h2 id="authTitle">เข้าสู่ระบบด้วยรหัสนักเรียน</h2>
+      <p class="sub" id="authHint">ใช้รหัสนักเรียนของตัวเองเป็นชื่อผู้ใช้ ถ้ายังไม่เคยใช้ให้กดสมัครก่อน</p>
+      <label class="fld"><span>รหัสนักเรียน</span>
+        <input type="text" id="inSid" inputmode="numeric" autocomplete="username" placeholder="เช่น 12345" maxlength="20"></label>
+      <label class="fld hide" id="fldName"><span>ชื่อ-นามสกุล</span>
+        <input type="text" id="inFullName" autocomplete="name" placeholder="เช่น สมชาย ใจดี" maxlength="30"></label>
+      <label class="fld"><span>รหัสผ่าน</span>
+        <input type="password" id="inPw" autocomplete="current-password" placeholder="อย่างน้อย 4 ตัว" maxlength="60"></label>
+      <div class="row">
+        <button class="btn" id="btnAuth">เข้าสู่ระบบ</button>
+        <button class="btn ghost" id="btnSwitchAuth">ยังไม่มีบัญชี สมัครใหม่</button>
+      </div>
+    </div>
+
+    <div class="card hide" id="lobbyCard">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div>
+          <p class="eyebrow">สวัสดี</p>
+          <h2 id="myName">—</h2>
+          <p class="sub" id="mySid" style="margin-bottom:0">—</p>
+        </div>
+        <div class="row">
+          <button class="avatar" id="myAvatar" type="button" aria-label="ใส่รูปของฉัน">แตะเพื่อใส่รูป</button>
+          <button class="btn ghost sm" id="btnLogout">ออกจากระบบ</button>
+        </div>
+      </div>
+      <input type="file" id="myPhotoFile" accept="image/*" capture="user" style="display:none">
+      <div class="hr"></div>
+      <h3 style="margin-top:0">ยังไม่ได้อยู่ในทีม</h3>
+      <div class="lobby">
+        <div class="lobbybox">
+          <b>สร้างทีมใหม่</b>
+          <p class="sub">คนแรกของทีมเป็นคนสร้าง แล้วบอกรหัสทีมให้เพื่อนอีก 2 คน</p>
+          <label class="fld"><span>ชื่อทีม</span><input type="text" id="inTeamName" placeholder="เช่น ทีมสายฟ้า" maxlength="28"></label>
+          <button class="btn" id="btnCreateTeam">สร้างทีม</button>
+        </div>
+        <div class="lobbybox">
+          <b>เข้าร่วมทีมที่มีอยู่</b>
+          <p class="sub">ขอรหัสทีม 4 ตัวจากเพื่อนที่สร้างทีมไว้แล้ว</p>
+          <label class="fld"><span>รหัสทีม</span><input type="text" id="inTeamCode" class="codein" placeholder="ABCD" maxlength="4" autocapitalize="characters"></label>
+          <button class="btn" id="btnJoinTeam">เข้าร่วม</button>
+        </div>
+      </div>
     </div>
 
     <div class="card hide" id="teamHead">
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div style="min-width:0">
-          <p class="eyebrow">ทีมของคุณ</p>
+          <p class="eyebrow">ทีมของคุณ · รหัสทีม <b id="tCode" class="mono">—</b></p>
           <h2 id="tName">—</h2>
           <div class="facerow" id="tFaces"></div>
           <p class="sub" id="tMem" style="margin-bottom:0">—</p>
         </div>
         <div class="row">
           <span class="pill mono" id="tStars">⭐ 0</span>
-          <button class="btn ghost sm" id="btnEdit">แก้ไขทีม</button>
+          <button class="btn ghost sm" id="btnRename">เปลี่ยนชื่อทีม</button>
           <button class="btn ghost sm" id="btnLeave">ออกจากทีม</button>
         </div>
       </div>
@@ -133,10 +169,34 @@
     </div>
 
     <div class="card">
+      <p class="eyebrow">แก้ให้ตรงกับชุดจริง</p>
+      <h2>รายการโมดูลของแต่ละใบงาน</h2>
+      <p class="sub">ถ้าเจอใบงานไหนที่รายการโมดูลไม่ตรงกับของในมือ แก้ตรงนี้ได้เลย นักเรียนทุกเครื่องจะเห็นรายการใหม่ทันที</p>
+      <label class="fld"><span>เลือกใบงาน</span><select id="selWsM"></select></label>
+      <label class="fld"><span>โมดูลที่ใช้จริง</span><input type="text" id="inMod" maxlength="200" placeholder="เช่น Infrared module, Digital tube module"></label>
+      <div class="row">
+        <button class="btn sm" id="btnSaveMod">บันทึก</button>
+        <button class="btn ghost sm" id="btnResetMod">คืนค่าเดิม</button>
+      </div>
+      <div id="modList" style="margin-top:14px"></div>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">บัญชีนักเรียน</p>
+      <h2>รายชื่อที่สมัครไว้</h2>
+      <p class="sub">ถ้ามีเด็กลืมรหัสผ่าน กดตั้งรหัสใหม่ให้ได้จากตรงนี้</p>
+      <div class="row" style="margin-bottom:12px"><button class="btn ghost sm" id="btnRoster">โหลดรายชื่อ</button></div>
+      <div id="rosterBox"></div>
+    </div>
+
+    <div class="card">
       <p class="eyebrow">อันตราย</p>
       <h2>ล้างข้อมูลการแข่งขัน</h2>
-      <p class="sub">ลบทุกทีมและทุกผลตรวจของห้องนี้อย่างถาวร ใช้เมื่อจะเริ่มคาบใหม่กับนักเรียนอีกกลุ่ม</p>
-      <button class="btn warn sm" id="btnReset">ล้างข้อมูลห้องนี้</button>
+      <p class="sub">ลบทุกทีมและทุกผลตรวจของห้องนี้อย่างถาวร บัญชีนักเรียนยังอยู่ เด็กเข้าสู่ระบบด้วยรหัสเดิมได้ แล้วจับทีมใหม่</p>
+      <div class="row">
+        <button class="btn warn sm" id="btnReset">ล้างทีมและคะแนน</button>
+        <button class="btn warn sm" id="btnResetAll">ล้างทุกอย่างรวมบัญชีนักเรียน</button>
+      </div>
     </div>
   </section>
 </div>

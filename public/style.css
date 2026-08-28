@@ -221,7 +221,8 @@ table.board td.rank{font-family:"IBM Plex Mono",monospace;font-weight:600;width:
 }
 
 /* ---- ส่วนการประกอบ ---- */
-.asmwrap{display:grid;grid-template-columns:250px 1fr;gap:18px;align-items:start}
+.asmwrap{display:grid;grid-template-columns:250px minmax(0,1fr);gap:18px;align-items:start}
+.asmwrap > *{min-width:0}
 @media (max-width:640px){.asmwrap{grid-template-columns:1fr}}
 .asmimg{border:1px solid var(--rule);border-radius:10px;background:#fff;padding:8px}
 .asmimg img{width:100%;display:block;border-radius:6px}
@@ -232,7 +233,7 @@ table.board td.rank{font-family:"IBM Plex Mono",monospace;font-weight:600;width:
 }
 
 /* ---- ตัวดูภาพขั้นตอนการประกอบ ---- */
-.stepper{border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:#fff}
+.stepper{border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:#fff;max-width:100%;min-width:0}
 .stepbar{
   display:flex;align-items:center;gap:10px;justify-content:space-between;
   padding:10px 12px;background:var(--panel);color:#E6EBF0;flex-wrap:wrap;
@@ -245,15 +246,22 @@ table.board td.rank{font-family:"IBM Plex Mono",monospace;font-weight:600;width:
 }
 .navbtn:disabled{opacity:.35;cursor:not-allowed}
 .navbtn:focus-visible{outline:2px solid var(--led-bonus);outline-offset:2px}
-.stepview{position:relative;background:#fff;display:grid;place-items:center;min-height:220px}
-.stepview img{width:100%;max-width:760px;display:block}
+.stepview{position:relative;background:#fff;display:grid;place-items:center;aspect-ratio:16/9;overflow:hidden}
+.stepview img{width:100%;height:100%;object-fit:contain;display:block}
+.stepview::before{
+  content:"";position:absolute;inset:0;background:
+    repeating-linear-gradient(45deg,#F4F7F9 0 12px,#EDF1F4 12px 24px);z-index:0;
+}
+.stepview img,.stepview .zoom{position:relative;z-index:1}
 .stepview .zoom{
   position:absolute;right:10px;bottom:10px;font-size:11.5px;font-family:"IBM Plex Mono",monospace;
   background:rgba(19,28,38,.82);color:#fff;border:0;border-radius:6px;padding:6px 10px;cursor:pointer;
 }
 input[type=range].slider{width:100%;accent-color:var(--signal);margin:0}
-.thumbs{display:flex;gap:6px;overflow-x:auto;padding:10px 12px;background:#F4F7F9;border-top:1px solid var(--rule)}
-.thumbs img{height:52px;border-radius:5px;border:2px solid transparent;cursor:pointer;background:#fff;flex:none}
+.thumbs{display:flex;gap:6px;overflow-x:auto;padding:10px 12px;background:#F4F7F9;border-top:1px solid var(--rule);
+  scrollbar-width:thin;-webkit-overflow-scrolling:touch;max-width:100%}
+.thumbs img{height:52px;width:92px;object-fit:contain;border-radius:5px;border:2px solid transparent;
+  cursor:pointer;background:#fff;flex:none}
 .thumbs img[data-cur="1"]{border-color:var(--signal)}
 .lightbox{
   position:fixed;inset:0;background:rgba(10,15,20,.94);z-index:99;display:grid;place-items:center;padding:16px;
@@ -282,3 +290,17 @@ body.projector .wrap{max-width:1600px}
 body.projector table.board{font-size:19px}
 body.projector .pod .sc{font-size:34px}
 body.projector .pod .nm{font-size:22px}
+
+/* ---- เข้าสู่ระบบและล็อบบี้ ---- */
+.lobby{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:620px){.lobby{grid-template-columns:1fr}}
+.lobbybox{border:1px solid var(--rule);border-radius:10px;padding:16px;background:#F7F9FB}
+.lobbybox b{display:block;font-family:Anuphan,sans-serif;font-size:15px;margin-bottom:4px}
+.lobbybox .sub{margin-bottom:12px}
+input.codein{font-family:"IBM Plex Mono",monospace;font-size:24px;letter-spacing:.32em;text-align:center;text-transform:uppercase}
+#myAvatar{width:56px;height:56px;font-size:9.5px;margin:0}
+#tCode{background:var(--panel);color:#FFD9D5;padding:2px 8px;border-radius:5px;letter-spacing:.18em}
+table.roster{width:100%;border-collapse:collapse;font-size:13.5px}
+table.roster th,table.roster td{border-bottom:1px solid var(--rule);padding:8px;text-align:left}
+table.roster th{font-family:Anuphan,sans-serif;font-size:12px;color:var(--muted)}
+table.roster td.mono{font-family:"IBM Plex Mono",monospace}

@@ -22,19 +22,20 @@ const LS = {
 
 const S = {
   role: "team",
-  me: null,          // {id,name,members,photos} ของเครื่องนี้
-  draft: { names: ["", "", ""], photos: ["", "", ""] },
+  user: null,        // {sid,name,photo,teamId} ของคนที่เข้าสู่ระบบ
+  token: "",
+  authMode: "login",
   local: {},         // progress ที่กำลังแก้อยู่ ยังไม่ถูกเซิร์ฟเวอร์เขียนทับ
   teams: [],
   verdicts: {},
   ranking: {},
+  mods: {},
   ws: "A1",
   wsT: "A1",
   pin: LS.get("pin") || "",
   pinRequired: false,
   saveT: null,
 };
-let editing = false;
 
 /* ---------- โลโก้ LED ---------- */
 (function () {
@@ -73,6 +74,7 @@ function buildStepper(w) {
   const img = el("img");
   img.alt = "ขั้นตอนการประกอบ";
   img.decoding = "async";
+  img.fetchPriority = "high";
   view.appendChild(img);
   const zoom = el("button", "zoom", "ขยายเต็มจอ");
   view.appendChild(zoom);
@@ -87,12 +89,20 @@ function buildStepper(w) {
   const thumbs = el("div", "thumbs");
   for (let k = 1; k <= total; k++) {
     const t = el("img");
-    t.src = w.asm.dir + padNum(k) + ".jpg";
+    t.dataset.src = w.asm.dir + "t/" + padNum(k) + ".jpg";
     t.alt = "ขั้นที่ " + k;
     t.loading = "lazy";
+    t.decoding = "async";
     t.onclick = () => go(k);
     thumbs.appendChild(t);
   }
+  // เริ่มโหลดรูปย่อหลังภาพหลักขึ้นแล้ว เพื่อไม่ให้แย่งแบนด์วิดท์กัน
+  const loadThumbs = () => {
+    [...thumbs.children].forEach((t) => { if (t.dataset.src) { t.src = t.dataset.src; delete t.dataset.src; } });
+  };
+  img.addEventListener("load", loadThumbs, { once: true });
+  img.addEventListener("error", loadThumbs, { once: true });
+  setTimeout(loadThumbs, 2500);
 
   function go(k) {
     i = Math.max(1, Math.min(total, k));
@@ -142,7 +152,7 @@ function openLightbox(w, start, sync) {
   document.body.appendChild(lb);
 }
 
-/* ---------- รูปสมาชิก ---------- */
+/* ---------- รูปประจำตัว ---------- */
 const AVATAR_PX = 220;
 function shrinkImage(file) {
   return new Promise((resolve, reject) => {
@@ -156,8 +166,7 @@ function shrinkImage(file) {
         const side = Math.min(img.width, img.height);
         const cv = document.createElement("canvas");
         cv.width = cv.height = AVATAR_PX;
-        const cx = cv.getContext("2d");
-        cx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, AVATAR_PX, AVATAR_PX);
+        cv.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, AVATAR_PX, AVATAR_PX);
         resolve(cv.toDataURL("image/jpeg", 0.72));
       };
       img.src = fr.result;
@@ -166,72 +175,23 @@ function shrinkImage(file) {
   });
 }
 
-function renderMemberGrid() {
-  const g = $("#memberGrid");
-  if (!g) return;
-  g.innerHTML = "";
-  for (let i = 0; i < 3; i++) {
-    const card = el("div", "mcard");
-    const av = el("button", "avatar");
-    av.type = "button";
-    av.setAttribute("aria-label", "เพิ่มรูปสมาชิกคนที่ " + (i + 1));
-    const photo = S.draft.photos[i];
-    if (photo) { av.dataset.has = "1"; const im = el("img"); im.src = photo; im.alt = ""; av.appendChild(im); }
-    else av.textContent = "แตะเพื่อใส่รูป";
-    const file = el("input");
-    file.type = "file"; file.accept = "image/*"; file.capture = "user"; file.style.display = "none";
-    file.onchange = async () => {
-      const f = file.files && file.files[0];
-      if (!f) return;
-      try { S.draft.photos[i] = await shrinkImage(f); alertBox(""); renderMemberGrid(); pushTeam(); }
-      catch (e) { alertBox("err", "ใส่รูปไม่สำเร็จ: " + esc(e.message)); }
-      file.value = "";
-    };
-    av.onclick = () => file.click();
-    card.appendChild(av); card.appendChild(file);
-
-    const name = el("input");
-    name.type = "text"; name.maxLength = 24; name.placeholder = "ชื่อคนที่ " + (i + 1);
-    name.value = S.draft.names[i] || "";
-    name.oninput = () => { S.draft.names[i] = name.value; };
-    name.onblur = () => { if (S.me) pushTeam(); };
-    card.appendChild(name);
-
-    if (photo) {
-      const rm = el("button", "rm", "เอารูปออก");
-      rm.type = "button";
-      rm.onclick = () => { S.draft.photos[i] = ""; renderMemberGrid(); if (S.me) pushTeam(); };
-      card.appendChild(rm);
-    }
-    g.appendChild(card);
-  }
-}
-
-function faces(list, photos, cls) {
+function faces(members, cls) {
   const w = el("div", cls);
-  for (let i = 0; i < 3; i++) {
-    const nm = (list && list[i]) || "";
-    const ph = (photos && photos[i]) || "";
-    if (!nm && !ph) continue;
-    if (ph) { const im = el("img"); im.src = ph; im.alt = nm; im.title = nm; w.appendChild(im); }
-    else { const sp = el("span", null, nm.slice(0, 1) || "?"); sp.title = nm; w.appendChild(sp); }
-  }
+  (members || []).forEach((m) => {
+    if (m.photo) { const im = el("img"); im.src = m.photo; im.alt = m.name; im.title = m.name; w.appendChild(im); }
+    else { const sp = el("span", null, (m.name || "?").slice(0, 1)); sp.title = m.name; w.appendChild(sp); }
+  });
   return w;
-}
-
-async function pushTeam() {
-  if (!S.me) return;
-  S.me.members = S.draft.names.map((n) => n.trim());
-  S.me.photos = S.draft.photos.slice();
-  LS.set("me", S.me);
-  try { await api("team", S.me); } catch (e) { alertBox("err", "บันทึกข้อมูลทีมไม่สำเร็จ: " + esc(e.message)); }
 }
 
 /* ---------- เรียก API ---------- */
 async function api(path, body) {
   const res = await fetch("/api/" + path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(S.token ? { "x-auth": S.token, "x-sid": S.user ? S.user.sid : "" } : {}),
+    },
     body: JSON.stringify({ room: ROOM, ...body }),
   });
   if (!res.ok) {
@@ -271,87 +231,163 @@ async function setRole(r) {
 })();
 $("#selWs").onchange = (e) => { S.ws = e.target.value; renderWorksheet(); renderRank(); };
 $("#selWsT").onchange = (e) => { S.wsT = e.target.value; renderTeacher(); };
+$("#selWsM").innerHTML = WS.map((w) => '<option value="' + w.id + '">' + w.id + " · " + esc(w.title) + "</option>").join("");
+$("#selWsM").onchange = () => { $("#inMod").value = S.mods[$("#selWsM").value] || WSMAP[$("#selWsM").value].mod; };
+$("#btnSaveMod").onclick = async () => {
+  const ws = $("#selWsM").value;
+  const v = $("#inMod").value.trim();
+  try { await api("mod", { ws, mod: v === WSMAP[ws].mod ? "" : v, pin: S.pin }); alertBox("info", "บันทึกรายการโมดูลของ " + ws + " แล้ว"); }
+  catch (e) { alertBox("err", esc(e.message)); }
+};
+$("#btnResetMod").onclick = async () => {
+  const ws = $("#selWsM").value;
+  try { await api("mod", { ws, mod: "", pin: S.pin }); $("#inMod").value = WSMAP[ws].mod; alertBox("info", "คืนค่าเดิมของ " + ws + " แล้ว"); }
+  catch (e) { alertBox("err", esc(e.message)); }
+};
 
 /* ============================================================
-   ฝั่งทีม
+   เข้าสู่ระบบ
    ============================================================ */
-$("#btnJoin").onclick = async () => {
-  const name = $("#inName").value.trim();
-  if (!name) { alertBox("err", "ใส่ชื่อทีมก่อนจึงจะเข้าร่วมได้"); $("#inName").focus(); return; }
-  const id = LS.get("teamId") || "t" + Math.random().toString(36).slice(2, 8);
-  S.me = { id, name, members: S.draft.names.map((n) => n.trim()), photos: S.draft.photos.slice() };
-  LS.set("teamId", id);
-  LS.set("me", S.me);
-  editing = false;
-  try { await api("team", S.me); alertBox(""); }
-  catch (e) { alertBox("err", "บันทึกไม่สำเร็จ: " + esc(e.message)); }
+function setAuthMode(m) {
+  S.authMode = m;
+  const reg = m === "register";
+  $("#authTitle").textContent = reg ? "สมัครใช้งานด้วยรหัสนักเรียน" : "เข้าสู่ระบบด้วยรหัสนักเรียน";
+  $("#authHint").textContent = reg
+    ? "สมัครครั้งเดียวพอ ครั้งต่อไปใช้รหัสนักเรียนกับรหัสผ่านเดิมเข้าได้เลย"
+    : "ใช้รหัสนักเรียนของตัวเองเป็นชื่อผู้ใช้ ถ้ายังไม่เคยใช้ให้กดสมัครก่อน";
+  $("#fldName").classList.toggle("hide", !reg);
+  $("#btnAuth").textContent = reg ? "สมัครและเข้าใช้งาน" : "เข้าสู่ระบบ";
+  $("#btnSwitchAuth").textContent = reg ? "มีบัญชีแล้ว กลับไปเข้าสู่ระบบ" : "ยังไม่มีบัญชี สมัครใหม่";
+  $("#inPw").autocomplete = reg ? "new-password" : "current-password";
+}
+$("#btnSwitchAuth").onclick = () => setAuthMode(S.authMode === "login" ? "register" : "login");
+
+$("#btnAuth").onclick = async () => {
+  const sid = $("#inSid").value.trim();
+  const password = $("#inPw").value;
+  const name = $("#inFullName").value.trim();
+  if (!sid) { alertBox("err", "ใส่รหัสนักเรียนก่อน"); $("#inSid").focus(); return; }
+  if (!password) { alertBox("err", "ใส่รหัสผ่านก่อน"); $("#inPw").focus(); return; }
+  try {
+    const r = await api(S.authMode === "register" ? "register" : "login", { sid, password, name });
+    S.token = r.token; S.user = r.user;
+    LS.set("auth", { token: r.token, sid: r.user.sid });
+    $("#inPw").value = "";
+    alertBox("");
+    render();
+  } catch (e) { alertBox("err", esc(e.message)); }
+};
+[$("#inSid"), $("#inPw"), $("#inFullName")].forEach((n) => {
+  n.onkeydown = (e) => { if (e.key === "Enter") $("#btnAuth").click(); };
+});
+
+$("#btnLogout").onclick = () => {
+  S.token = ""; S.user = null;
+  LS.del("auth");
   render();
 };
+
+$("#myAvatar").onclick = () => $("#myPhotoFile").click();
+$("#myPhotoFile").onchange = async () => {
+  const f = $("#myPhotoFile").files && $("#myPhotoFile").files[0];
+  if (!f) return;
+  try {
+    const photo = await shrinkImage(f);
+    await api("photo", { photo });
+    S.user.photo = photo;
+    alertBox(""); render();
+  } catch (e) { alertBox("err", "ใส่รูปไม่สำเร็จ: " + esc(e.message)); }
+  $("#myPhotoFile").value = "";
+};
+
+/* ============================================================
+   จับทีม
+   ============================================================ */
+$("#btnCreateTeam").onclick = async () => {
+  const name = $("#inTeamName").value.trim();
+  if (!name) { alertBox("err", "ใส่ชื่อทีมก่อน"); return; }
+  try { const r = await api("team/create", { name }); S.user.teamId = r.teamId; alertBox(""); render(); }
+  catch (e) { alertBox("err", esc(e.message)); }
+};
+$("#btnJoinTeam").onclick = async () => {
+  const code = $("#inTeamCode").value.trim().toUpperCase();
+  if (code.length !== 4) { alertBox("err", "รหัสทีมมี 4 ตัว"); return; }
+  try { const r = await api("team/join", { code }); S.user.teamId = r.teamId; alertBox(""); render(); }
+  catch (e) { alertBox("err", esc(e.message)); }
+};
+$("#inTeamCode").oninput = (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""); };
 
 $("#btnLeave").onclick = async () => {
-  if (!confirm("ออกจากทีมและลบข้อมูลของทีมนี้ออกจากกระดาน?")) return;
-  try { await api("leave", { id: S.me.id }); } catch {}
-  LS.del("me"); LS.del("teamId");
-  S.me = null; S.local = {};
-  S.draft = { names: ["", "", ""], photos: ["", "", ""] };
-  editing = false;
-  $("#inName").value = "";
-  renderMemberGrid();
-  render();
+  if (!confirm("ออกจากทีมนี้? ถ้าเป็นคนสุดท้ายในทีม ทีมและคะแนนจะถูกลบทั้งหมด")) return;
+  try { await api("team/leave", {}); S.user.teamId = ""; S.local = {}; render(); }
+  catch (e) { alertBox("err", esc(e.message)); }
+};
+$("#btnRename").onclick = async () => {
+  const t = myTeam();
+  const name = prompt("ชื่อทีมใหม่", t ? t.name : "");
+  if (name === null) return;
+  try { await api("team/rename", { name: name.trim() }); }
+  catch (e) { alertBox("err", esc(e.message)); }
 };
 
-function serverTeam() {
-  return S.me ? S.teams.find((t) => t.id === S.me.id) : null;
+function myTeam() {
+  if (!S.user || !S.user.teamId) return null;
+  return S.teams.find((t) => t.id === S.user.teamId) || null;
 }
 function prog() {
   const wid = S.ws;
   if (!S.local[wid]) {
-    const srv = serverTeam();
-    const p = srv && srv.progress && srv.progress[wid];
+    const t = myTeam();
+    const p = t && t.progress && t.progress[wid];
     S.local[wid] = p
       ? { c: p.c.slice(), bonus: p.bonus, start: p.start, flagAt: p.flagAt, ans: (p.ans || ["", ""]).slice() }
       : { c: [false, false, false], bonus: false, start: 0, flagAt: 0, ans: ["", ""] };
   }
   return S.local[wid];
 }
-function myVerdict() { return (S.me && S.verdicts[S.me.id]) || {}; }
+function myVerdict() {
+  const t = myTeam();
+  return (t && S.verdicts[t.id]) || {};
+}
 function totalStars(v) {
   let n = 0;
   for (const k in v) if (v[k] && v[k].status === "pass") n += v[k].stars || 2;
   return n;
 }
 
-$("#btnEdit").onclick = () => {
-  editing = true;
-  $("#inName").value = S.me ? S.me.name : "";
-  renderMemberGrid();
-  render();
-  $("#joinCard").scrollIntoView?.({ behavior: "smooth", block: "start" });
-};
-
 function renderTeam() {
-  const joined = !!S.me;
-  $("#joinCard").classList.toggle("hide", joined && !editing);
-  $("#btnJoin").textContent = joined ? "บันทึกการแก้ไข" : "เข้าร่วมการแข่งขัน";
-  $("#joinCard").querySelector("h2").textContent = joined ? "แก้ไขชื่อทีมและสมาชิก" : "ตั้งชื่อทีมก่อนเริ่มแข่ง";
-  $("#teamHead").classList.toggle("hide", !joined);
-  $("#wsCard").classList.toggle("hide", !joined);
-  $("#rankCard").classList.toggle("hide", !joined);
-  if (!joined) return;
-  $("#tName").textContent = S.me.name;
-  const fr = $("#tFaces");
-  fr.replaceWith(faces(S.me.members, S.me.photos, "facerow"));
-  const nf = document.querySelector("#teamHead .facerow"); if (nf) nf.id = "tFaces";
-  const named = (S.me.members || []).filter(Boolean);
-  $("#tMem").textContent = named.length ? named.join(" · ") : "ยังไม่ได้ใส่ชื่อสมาชิก";
+  const logged = !!S.user;
+  const t = myTeam();
+  $("#authCard").classList.toggle("hide", logged);
+  $("#lobbyCard").classList.toggle("hide", !logged || !!t);
+  $("#teamHead").classList.toggle("hide", !t);
+  $("#wsCard").classList.toggle("hide", !t);
+  $("#rankCard").classList.toggle("hide", !t);
+  if (!logged) return;
+
+  $("#myName").textContent = S.user.name;
+  $("#mySid").textContent = "รหัสนักเรียน " + S.user.sid;
+  const av = $("#myAvatar");
+  av.innerHTML = "";
+  if (S.user.photo) { av.dataset.has = "1"; const im = el("img"); im.src = S.user.photo; im.alt = ""; av.appendChild(im); }
+  else { av.dataset.has = "0"; av.textContent = "ใส่รูป"; }
+  if (!t) return;
+
+  $("#tCode").textContent = t.code;
+  $("#tName").textContent = t.name;
   $("#selWs").value = S.ws;
   $("#tStars").textContent = "⭐ " + totalStars(myVerdict());
+  const fr = $("#tFaces");
+  const nf = faces(t.members, "facerow");
+  nf.id = "tFaces";
+  fr.replaceWith(nf);
+  $("#tMem").textContent = t.members.map((m) => m.name).join(" · ") + " · " + t.members.length + "/3 คน";
   renderWorksheet();
   renderRank();
 }
 
 function renderWorksheet() {
-  if (!S.me || S.role !== "team") return;
+  if (!myTeam() || S.role !== "team") return;
   const w = WSMAP[S.ws], p = prog(), v = myVerdict()[S.ws] || {};
   const c = $("#wsCard");
   const focusId = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.ans : null;
@@ -384,7 +420,7 @@ function renderWorksheet() {
   c.appendChild(el("h3", null, "จุดประสงค์"));
   const ul = el("ul", "plain"); w.obj.forEach((o) => ul.appendChild(el("li", null, o))); c.appendChild(ul);
   c.appendChild(el("h3", null, "โมดูลที่ใช้"));
-  c.appendChild(el("p", null, w.mod));
+  c.appendChild(el("p", null, S.mods[w.id] || w.mod));
   c.appendChild(el("h3", null, "แบ่งงานในทีม"));
   c.appendChild(el("p", null, w.roles));
   if (w.asm) {
@@ -400,8 +436,6 @@ function renderWorksheet() {
     wrap.appendChild(fig);
 
     const right = el("div");
-    right.appendChild(el("span", "pagechip", w.asm.n + " ขั้น · ตรงกับคู่มือหน้า " + w.asm.from + "–" + w.asm.to));
-    right.appendChild(el("p", "sub", "เลื่อนดูทีละขั้นได้เลย ไม่ต้องเปิดคู่มือแยก แตะที่รูปเพื่อขยายเต็มจอ"));
     right.appendChild(buildStepper(w));
     wrap.appendChild(right);
     c.appendChild(wrap);
@@ -469,7 +503,7 @@ function renderWorksheet() {
 }
 
 function renderRank() {
-  if (!S.me) return;
+  if (!myTeam()) return;
   $("#rankTitle").textContent = "อันดับใบงาน " + S.ws;
   const list = S.ranking[S.ws] || [];
   const b = $("#rankBody");
@@ -482,15 +516,11 @@ function renderRank() {
 }
 
 function save(now) {
-  if (!S.me) return;
+  if (!myTeam()) return;
   clearTimeout(S.saveT);
   const go = async () => {
-    try {
-      await api("progress", { id: S.me.id, ws: S.ws, progress: prog() });
-    } catch (e) {
-      if (String(e.message).includes("ไม่พบทีม")) { await api("team", S.me).catch(() => {}); }
-      else setSync(false, "บันทึกไม่สำเร็จ");
-    }
+    try { await api("progress", { ws: S.ws, progress: prog() }); }
+    catch (e) { setSync(false, "บันทึกไม่สำเร็จ"); }
   };
   if (now) go(); else S.saveT = setTimeout(go, 800);
 }
@@ -563,8 +593,8 @@ function renderTeacher() {
       const v = S.verdicts[t.id] || {};
       const tile = el("div", "tile");
       tile.appendChild(el("p", "tname", t.name));
-      tile.appendChild(faces(t.members, t.photos, "faces"));
-      tile.appendChild(el("p", "tmem", (t.members || []).filter(Boolean).join(" · ") || "—"));
+      tile.appendChild(faces(t.members, "faces"));
+      tile.appendChild(el("p", "tmem", (t.members || []).map((m) => m.name).join(" · ") || "—"));
       const m = el("div", "matrix");
       for (let i = 0; i < 25; i++) {
         const dot = el("i");
@@ -585,6 +615,15 @@ function renderTeacher() {
       tiles.appendChild(tile);
     });
   }
+
+  // รายการโมดูลที่ครูแก้ไว้
+  const sel = $("#selWsM").value;
+  if (document.activeElement !== $("#inMod")) $("#inMod").value = S.mods[sel] || WSMAP[sel].mod;
+  const edited = Object.keys(S.mods);
+  $("#modList").innerHTML = edited.length
+    ? '<p class="sub" style="margin:0 0 6px">แก้ไว้แล้ว ' + edited.length + " ใบงาน</p><ul class=\"plain\">" +
+      edited.sort().map((k) => "<li><b>" + k + "</b> — " + esc(S.mods[k]) + "</li>").join("") + "</ul>"
+    : '<p class="sub" style="margin:0">ยังไม่ได้แก้ใบงานไหน</p>';
 
   const sum = $("#summary");
   if (!S.teams.length) { sum.innerHTML = '<div class="empty">ยังไม่มีข้อมูล</div>'; }
@@ -617,8 +656,13 @@ async function verdict(teamId, ws, extra) {
 }
 
 $("#btnReset").onclick = async () => {
-  if (!confirm("ลบทุกทีมและผลตรวจทั้งหมดของห้อง " + ROOM + "? ย้อนกลับไม่ได้")) return;
-  try { await api("reset", { pin: S.pin }); } catch (e) { alertBox("err", esc(e.message)); }
+  if (!confirm("ลบทุกทีมและผลตรวจของห้อง " + ROOM + "? บัญชีนักเรียนยังอยู่")) return;
+  try { await api("reset", { pin: S.pin, keepUsers: true }); } catch (e) { alertBox("err", esc(e.message)); }
+};
+$("#btnResetAll").onclick = async () => {
+  if (!confirm("ลบทุกอย่างรวมบัญชีนักเรียนของห้อง " + ROOM + "? เด็กต้องสมัครใหม่ทั้งหมด")) return;
+  try { await api("reset", { pin: S.pin, keepUsers: false }); LS.del("auth"); S.user = null; S.token = ""; render(); }
+  catch (e) { alertBox("err", esc(e.message)); }
 };
 
 $("#btnCsv").onclick = () => {
@@ -686,7 +730,7 @@ function renderScore() {
     d.appendChild(el("div", "nm", r.t.name));
     d.appendChild(el("div", "sc", "⭐ " + r.stars));
     d.appendChild(el("div", "sub2", "ผ่าน " + r.passed + " ใบงาน · ได้ที่ 1 จำนวน " + r.firsts + " ครั้ง"));
-    d.appendChild(faces(r.t.members, r.t.photos, "facerow"));
+    d.appendChild(faces(r.t.members, "facerow"));
     podium.appendChild(d);
   });
   pod.appendChild(podium);
@@ -740,14 +784,16 @@ function applyState(st) {
   S.teams = st.teams || [];
   S.verdicts = st.verdicts || {};
   S.ranking = st.ranking || {};
-  // ให้ค่าจากเซิร์ฟเวอร์ชนะ ยกเว้นใบงานที่กำลังแก้อยู่ตรงหน้า
-  const mine = serverTeam();
-  if (mine) {
-    for (const wid in mine.progress) {
+  S.mods = st.mods || {};
+  const t = myTeam();
+  if (t) {
+    for (const wid in t.progress) {
       if (wid === S.ws && document.activeElement && document.activeElement.dataset.ans != null) continue;
-      const p = mine.progress[wid];
+      const p = t.progress[wid];
       S.local[wid] = { c: p.c.slice(), bonus: p.bonus, start: p.start, flagAt: p.flagAt, ans: (p.ans || ["", ""]).slice() };
     }
+    const me = t.members.find((m) => m.sid === S.user.sid);
+    if (me && S.user) S.user.photo = me.photo;
   }
   render();
 }
@@ -765,7 +811,7 @@ function connect() {
 }
 
 setInterval(() => {
-  if (S.role !== "team" || !S.me) return;
+  if (S.role !== "team" || !myTeam()) return;
   const p = S.local[S.ws];
   const d = document.getElementById("tdisp");
   if (d && p && p.start) d.textContent = "⏱ " + elapsed(p.start);
@@ -774,18 +820,42 @@ setInterval(() => {
 /* ============================================================
    บูต
    ============================================================ */
+/* ---------- รายชื่อนักเรียนสำหรับครู ---------- */
+$("#btnRoster").onclick = async () => {
+  try {
+    const r = await api("roster", { pin: S.pin });
+    if (!r.users.length) { $("#rosterBox").innerHTML = '<div class="empty">ยังไม่มีใครสมัคร</div>'; return; }
+    let h = '<table class="roster"><tr><th>รหัสนักเรียน</th><th>ชื่อ</th><th>ทีม</th><th></th></tr>';
+    r.users.forEach((u) => {
+      h += '<tr><td class="mono">' + esc(u.sid) + "</td><td>" + esc(u.name) + "</td><td>" +
+challenge(u.team) + '</td><td><button class="btn ghost sm" data-pw="' + esc(u.sid) + '">ตั้งรหัสใหม่</button></td></tr>';
+    });
+    $("#rosterBox").innerHTML = h + "</table>";
+    $("#rosterBox").querySelectorAll("[data-pw]").forEach((b) => {
+      b.onclick = async () => {
+        const pw = prompt("รหัสผ่านใหม่ของ " + b.dataset.pw + " (อย่างน้อย 4 ตัว)");
+        if (!pw) return;
+        try { await api("resetpw", { sid: b.dataset.pw, password: pw, pin: S.pin }); alertBox("info", "ตั้งรหัสใหม่ให้ " + esc(b.dataset.pw) + " แล้ว บอกเด็กว่า " + esc(pw)); }
+        catch (e) { alertBox("err", esc(e.message)); }
+      };
+    });
+  } catch (e) { alertBox("err", esc(e.message)); }
+};
+function challenge(v) { return v ? esc(v) : '<span style="color:var(--faint)">ยังไม่มีทีม</span>'; }
+
 (async function init() {
   try {
     const cfg = await (await fetch("/api/config")).json();
     S.pinRequired = !!cfg.pinRequired;
   } catch {}
-  const me = LS.get("me");
-  if (me && me.id) {
-    S.me = me;
-    S.draft.names = [0, 1, 2].map((i) => (me.members && me.members[i]) || "");
-    S.draft.photos = [0, 1, 2].map((i) => (me.photos && me.photos[i]) || "");
+  setAuthMode("login");
+  const a = LS.get("auth");
+  if (a && a.token && a.sid) {
+    S.token = a.token;
+    S.user = { sid: a.sid, name: a.sid, photo: "", teamId: "" };
+    try { const r = await api("me", {}); S.user = r.user; }
+    catch { S.token = ""; S.user = null; LS.del("auth"); }
   }
-  renderMemberGrid();
   const role = LS.get("role");
   S.role = ["teacher", "score"].includes(role) ? role : "team";
   $("#btnTeam").setAttribute("aria-pressed", S.role === "team");
@@ -796,6 +866,4 @@ setInterval(() => {
   $("#viewScore").classList.toggle("hide", S.role !== "score");
   render();
   connect();
-  // เครื่องที่เคยเข้าร่วมแล้ว ให้ประกาศตัวกับเซิร์ฟเวอร์อีกครั้งเผื่อข้อมูลถูกล้าง
-  if (S.me) api("team", S.me).catch(() => {});
 })();
