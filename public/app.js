@@ -53,6 +53,95 @@ function alertBox(kind, html) {
 }
 
 
+
+/* ---------- ตัวดูภาพขั้นตอนการประกอบ ---------- */
+const stepAt = {}; // จำขั้นที่ดูค้างไว้ของแต่ละใบงาน
+function padNum(n) { return String(n).padStart(3, "0"); }
+
+function buildStepper(w) {
+  const total = w.asm.n;
+  let i = Math.min(stepAt[w.id] || 1, total);
+  const box = el("div", "stepper");
+
+  const bar = el("div", "stepbar");
+  const prev = el("button", "navbtn", "◀ ก่อนหน้า");
+  const lbl = el("span", "lbl");
+  const next = el("button", "navbtn", "ถัดไป ▶");
+  bar.appendChild(prev); bar.appendChild(lbl); bar.appendChild(next);
+
+  const view = el("div", "stepview");
+  const img = el("img");
+  img.alt = "ขั้นตอนการประกอบ";
+  img.decoding = "async";
+  view.appendChild(img);
+  const zoom = el("button", "zoom", "ขยายเต็มจอ");
+  view.appendChild(zoom);
+
+  const rangeWrap = el("div");
+  rangeWrap.style.padding = "10px 12px 4px";
+  const range = el("input", "slider");
+  range.type = "range"; range.min = "1"; range.max = String(total); range.step = "1";
+  range.setAttribute("aria-label", "เลื่อนเลือกขั้นตอน");
+  rangeWrap.appendChild(range);
+
+  const thumbs = el("div", "thumbs");
+  for (let k = 1; k <= total; k++) {
+    const t = el("img");
+    t.src = w.asm.dir + padNum(k) + ".jpg";
+    t.alt = "ขั้นที่ " + k;
+    t.loading = "lazy";
+    t.onclick = () => go(k);
+    thumbs.appendChild(t);
+  }
+
+  function go(k) {
+    i = Math.max(1, Math.min(total, k));
+    stepAt[w.id] = i;
+    img.src = w.asm.dir + padNum(i) + ".jpg";
+    lbl.innerHTML = "ขั้นที่ <b>" + i + "</b> จาก " + total;
+    prev.disabled = i <= 1;
+    next.disabled = i >= total;
+    range.value = String(i);
+    [...thumbs.children].forEach((t, idx) => { t.dataset.cur = idx + 1 === i ? "1" : "0"; });
+    const cur = thumbs.children[i - 1];
+    if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+    // โหลดล่วงหน้าหนึ่งขั้นเพื่อให้กดถัดไปแล้วขึ้นทันที
+    if (i < total) { const pre = new Image(); pre.src = w.asm.dir + padNum(i + 1) + ".jpg"; }
+  }
+  prev.onclick = () => go(i - 1);
+  next.onclick = () => go(i + 1);
+  range.oninput = () => go(Number(range.value));
+  zoom.onclick = () => openLightbox(w, i, go);
+  img.onclick = () => openLightbox(w, i, go);
+  img.style.cursor = "zoom-in";
+
+  box.appendChild(bar); box.appendChild(view); box.appendChild(rangeWrap); box.appendChild(thumbs);
+  go(i);
+  return box;
+}
+
+function openLightbox(w, start, sync) {
+  let i = start;
+  const lb = el("div", "lightbox");
+  const img = el("img");
+  img.alt = "ขั้นตอนการประกอบ";
+  const close = el("button", null, "ปิด");
+  lb.appendChild(img); lb.appendChild(close);
+  function draw() { img.src = w.asm.dir + padNum(i) + ".jpg"; }
+  function shut() { document.removeEventListener("keydown", key); lb.remove(); sync(i); }
+  function key(e) {
+    if (e.key === "Escape") shut();
+    else if (e.key === "ArrowRight" && i < w.asm.n) { i++; draw(); }
+    else if (e.key === "ArrowLeft" && i > 1) { i--; draw(); }
+  }
+  img.onclick = () => { if (i < w.asm.n) { i++; draw(); } else shut(); };
+  close.onclick = shut;
+  lb.onclick = (e) => { if (e.target === lb) shut(); };
+  document.addEventListener("keydown", key);
+  draw();
+  document.body.appendChild(lb);
+}
+
 /* ---------- รูปสมาชิก ---------- */
 const AVATAR_PX = 220;
 function shrinkImage(file) {
@@ -155,6 +244,7 @@ async function api(path, body) {
 /* ---------- สลับมุมมอง ---------- */
 $("#btnTeam").onclick = () => setRole("team");
 $("#btnTeacher").onclick = () => setRole("teacher");
+$("#btnScore").onclick = () => setRole("score");
 async function setRole(r) {
   if (r === "teacher" && S.pinRequired && !S.pin) {
     const pin = prompt("ใส่รหัสครู");
@@ -165,15 +255,17 @@ async function setRole(r) {
   S.role = r;
   $("#btnTeam").setAttribute("aria-pressed", r === "team");
   $("#btnTeacher").setAttribute("aria-pressed", r === "teacher");
+  $("#btnScore").setAttribute("aria-pressed", r === "score");
   $("#viewTeam").classList.toggle("hide", r !== "team");
   $("#viewTeacher").classList.toggle("hide", r !== "teacher");
+  $("#viewScore").classList.toggle("hide", r !== "score");
   LS.set("role", r);
   render();
 }
 
 /* ---------- ตัวเลือกใบงาน ---------- */
 (function fillSelects() {
-  const opts = WS.map((w) => '<option value="' + w.id + '">' + w.id + " · " + esc(w.title) + "  (บทที่ " + w.ref + ")</option>").join("");
+  const opts = WS.map((w) => '<option value="' + w.id + '">' + w.id + " · " + esc(w.title) + "</option>").join("");
   $("#selWs").innerHTML = opts;
   $("#selWsT").innerHTML = opts;
 })();
@@ -217,8 +309,8 @@ function prog() {
     const srv = serverTeam();
     const p = srv && srv.progress && srv.progress[wid];
     S.local[wid] = p
-      ? { c: p.c.slice(), bonus: p.bonus, start: p.start, flagAt: p.flagAt, ans: (p.ans || ["", ""]).slice(), asm: (p.asm || []).slice() }
-      : { c: [false, false, false], bonus: false, start: 0, flagAt: 0, ans: ["", ""], asm: [] };
+      ? { c: p.c.slice(), bonus: p.bonus, start: p.start, flagAt: p.flagAt, ans: (p.ans || ["", ""]).slice() }
+      : { c: [false, false, false], bonus: false, start: 0, flagAt: 0, ans: ["", ""] };
   }
   return S.local[wid];
 }
@@ -234,7 +326,7 @@ $("#btnEdit").onclick = () => {
   $("#inName").value = S.me ? S.me.name : "";
   renderMemberGrid();
   render();
-  $("#joinCard").scrollIntoView({ behavior: "smooth", block: "start" });
+  $("#joinCard").scrollIntoView?.({ behavior: "smooth", block: "start" });
 };
 
 function renderTeam() {
@@ -296,8 +388,9 @@ function renderWorksheet() {
   c.appendChild(el("h3", null, "แบ่งงานในทีม"));
   c.appendChild(el("p", null, w.roles));
   if (w.asm) {
-    c.appendChild(el("h3", null, "ประกอบชิ้นส่วน"));
+    c.appendChild(el("h3", null, "ขั้นตอนการประกอบชิ้นส่วน"));
     const wrap = el("div", "asmwrap");
+
     const fig = el("figure", "asmimg");
     fig.style.margin = "0";
     const im = el("img");
@@ -307,16 +400,9 @@ function renderWorksheet() {
     wrap.appendChild(fig);
 
     const right = el("div");
-    right.appendChild(el("span", "pagechip", "คู่มือ Assembly Steps หน้า " + w.asm.from + "–" + w.asm.to + " · " + w.asm.pages + " หน้า"));
-    right.appendChild(el("p", "sub", "แตะติ๊กเมื่อประกอบครบแต่ละช่วง จะได้รู้ว่าเหลืออีกเท่าไหร่ และครูเห็นความคืบหน้าของทุกทีมพร้อมกัน"));
-    if (!p.asm) p.asm = [];
-    w.asm.ph.forEach((rg, i) => {
-      const b = el("button", "tick");
-      b.dataset.on = p.asm[i] ? "1" : "0";
-      b.innerHTML = '<span class="box"></span><span class="txt"><b>ช่วงที่ ' + (i + 1) + "</b>ประกอบตามคู่มือหน้า " + rg[0] + " ถึง " + rg[1] + "</span>";
-      b.onclick = () => { p.asm[i] = !p.asm[i]; save(); renderWorksheet(); };
-      right.appendChild(b);
-    });
+    right.appendChild(el("span", "pagechip", w.asm.n + " ขั้น · ตรงกับคู่มือหน้า " + w.asm.from + "–" + w.asm.to));
+    right.appendChild(el("p", "sub", "เลื่อนดูทีละขั้นได้เลย ไม่ต้องเปิดคู่มือแยก แตะที่รูปเพื่อขยายเต็มจอ"));
+    right.appendChild(buildStepper(w));
     wrap.appendChild(right);
     c.appendChild(wrap);
   }
@@ -439,10 +525,7 @@ function renderTeacher() {
       if (r.v && r.v.status === "pass") {
         meta.textContent = "ผ่านแล้ว · อันดับ " + r.v.rank + " · ⭐" + (r.v.stars || 2) + " · ผ่านเมื่อ " + hhmm(r.v.at);
       } else {
-        const done = (r.p.asm || []).filter(Boolean).length;
-        const tot = (WSMAP[wid].asm && WSMAP[wid].asm.ph.length) || 0;
         meta.textContent = "ยกป้าย " + hhmm(r.p.flagAt) + " · รอมาแล้ว " + elapsed(r.p.flagAt)
-          + (tot ? " · ประกอบ " + done + "/" + tot + " ช่วง" : "")
           + (r.p.bonus ? " · แจ้งว่าทำ Bonus แล้ว" : "");
       }
       info.appendChild(meta);
@@ -557,11 +640,100 @@ $("#btnCsv").onclick = () => {
   URL.revokeObjectURL(a.href);
 };
 
+
+/* ============================================================
+   หน้าคะแนนรวม
+   ============================================================ */
+function tally() {
+  return S.teams
+    .map((t) => {
+      const v = S.verdicts[t.id] || {};
+      const passes = Object.values(v).filter((x) => x.status === "pass");
+      return {
+        t,
+        v,
+        passed: passes.length,
+        stars: passes.reduce((a, x) => a + (x.stars || 2), 0),
+        firsts: passes.filter((x) => x.rank === 1).length,
+        bonus: passes.filter((x) => x.stars === 3).length,
+        last: passes.reduce((a, x) => Math.max(a, x.at || 0), 0),
+      };
+    })
+    .sort((a, b) => b.stars - a.stars || b.firsts - a.firsts || a.last - b.last);
+}
+
+function renderScore() {
+  if (S.role !== "score") return;
+  const rows = tally();
+  const pod = $("#podium");
+  const tab = $("#scoreTable");
+  const mtx = $("#matrixTable");
+
+  if (!rows.length) {
+    pod.innerHTML = "";
+    tab.innerHTML = '<div class="empty"><b>ยังไม่มีทีมเข้าร่วม</b>ตารางจะขึ้นเองทันทีที่มีทีมแรกผ่านใบงาน</div>';
+    mtx.innerHTML = "";
+    return;
+  }
+
+  // แท่นสามอันดับแรก
+  pod.innerHTML = "";
+  const podium = el("div", "podium");
+  const medals = ["🥇", "🥈", "🥉"];
+  rows.slice(0, 3).forEach((r, i) => {
+    const d = el("div", "pod" + (i === 0 ? " p1" : ""));
+    d.appendChild(el("div", "medal", medals[i]));
+    d.appendChild(el("div", "nm", r.t.name));
+    d.appendChild(el("div", "sc", "⭐ " + r.stars));
+    d.appendChild(el("div", "sub2", "ผ่าน " + r.passed + " ใบงาน · ได้ที่ 1 จำนวน " + r.firsts + " ครั้ง"));
+    d.appendChild(faces(r.t.members, r.t.photos, "facerow"));
+    podium.appendChild(d);
+  });
+  pod.appendChild(podium);
+
+  // ตารางอันดับเต็ม
+  let h = '<table class="board"><tr><th>ที่</th><th>ทีม</th><th>ดาวรวม</th><th>ผ่าน</th><th>ได้ที่ 1</th><th>ทำ Bonus</th></tr>';
+  rows.forEach((r, i) => {
+    h += "<tr>" +
+      '<td class="rank">' + (i + 1) + "</td>" +
+      "<td>" + esc(r.t.name) + "</td>" +
+      '<td class="mono">⭐ ' + r.stars + "</td>" +
+      '<td class="mono">' + r.passed + "/" + WS.length + "</td>" +
+      '<td class="mono">' + r.firsts + "</td>" +
+      '<td class="mono">' + r.bonus + "</td></tr>";
+  });
+  tab.innerHTML = h + "</table>";
+
+  // ตารางรายใบงาน
+  let m = '<table class="matrix"><tr><th>ทีม</th>';
+  WS.forEach((w) => { m += "<th>" + w.id + "</th>"; });
+  m += "<th>⭐</th></tr>";
+  rows.forEach((r) => {
+    m += "<tr><td>" + esc(r.t.name) + "</td>";
+    WS.forEach((w) => {
+      const x = r.v[w.id];
+      if (x && x.status === "pass") {
+        m += '<td class="' + (x.stars === 3 ? "gold" : "pass") + '" title="' + esc(w.title) + '">' + x.rank + "</td>";
+      } else m += "<td></td>";
+    });
+    m += '<td class="mono"><b>' + r.stars + "</b></td></tr>";
+  });
+  mtx.innerHTML = m + "</table>";
+}
+
+$("#btnFull").onclick = () => {
+  document.body.classList.toggle("projector");
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+  else document.exitFullscreen?.();
+};
+
 /* ============================================================
    สตรีมข้อมูลสด
    ============================================================ */
 function render() {
-  if (S.role === "team") renderTeam(); else renderTeacher();
+  if (S.role === "team") renderTeam();
+  else if (S.role === "teacher") renderTeacher();
+  else renderScore();
 }
 
 function applyState(st) {
@@ -574,7 +746,7 @@ function applyState(st) {
     for (const wid in mine.progress) {
       if (wid === S.ws && document.activeElement && document.activeElement.dataset.ans != null) continue;
       const p = mine.progress[wid];
-      S.local[wid] = { c: p.c.slice(), bonus: p.bonus, start: p.start, flagAt: p.flagAt, ans: (p.ans || ["", ""]).slice(), asm: (p.asm || []).slice() };
+      S.local[wid] = { c: p.c.slice(), bonus: p.bonus, start: p.start, flagAt: p.flagAt, ans: (p.ans || ["", ""]).slice() };
     }
   }
   render();
@@ -615,11 +787,13 @@ setInterval(() => {
   }
   renderMemberGrid();
   const role = LS.get("role");
-  S.role = role === "teacher" ? "teacher" : "team";
+  S.role = ["teacher", "score"].includes(role) ? role : "team";
   $("#btnTeam").setAttribute("aria-pressed", S.role === "team");
   $("#btnTeacher").setAttribute("aria-pressed", S.role === "teacher");
+  $("#btnScore").setAttribute("aria-pressed", S.role === "score");
   $("#viewTeam").classList.toggle("hide", S.role !== "team");
   $("#viewTeacher").classList.toggle("hide", S.role !== "teacher");
+  $("#viewScore").classList.toggle("hide", S.role !== "score");
   render();
   connect();
   // เครื่องที่เคยเข้าร่วมแล้ว ให้ประกาศตัวกับเซิร์ฟเวอร์อีกครั้งเผื่อข้อมูลถูกล้าง

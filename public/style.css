@@ -230,3 +230,55 @@ table.board td.rank{font-family:"IBM Plex Mono",monospace;font-weight:600;width:
   display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:12px;
   background:var(--panel);color:#FFD9D5;border-radius:6px;padding:3px 9px;margin-bottom:10px;
 }
+
+/* ---- ตัวดูภาพขั้นตอนการประกอบ ---- */
+.stepper{border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:#fff}
+.stepbar{
+  display:flex;align-items:center;gap:10px;justify-content:space-between;
+  padding:10px 12px;background:var(--panel);color:#E6EBF0;flex-wrap:wrap;
+}
+.stepbar .lbl{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:#BFD0DE}
+.stepbar .lbl b{color:#fff;font-weight:600}
+.navbtn{
+  font-family:Anuphan,sans-serif;font-size:14px;font-weight:600;border:1px solid #3A444E;
+  background:#252D35;color:#E6EBF0;padding:8px 15px;border-radius:7px;cursor:pointer;
+}
+.navbtn:disabled{opacity:.35;cursor:not-allowed}
+.navbtn:focus-visible{outline:2px solid var(--led-bonus);outline-offset:2px}
+.stepview{position:relative;background:#fff;display:grid;place-items:center;min-height:220px}
+.stepview img{width:100%;max-width:760px;display:block}
+.stepview .zoom{
+  position:absolute;right:10px;bottom:10px;font-size:11.5px;font-family:"IBM Plex Mono",monospace;
+  background:rgba(19,28,38,.82);color:#fff;border:0;border-radius:6px;padding:6px 10px;cursor:pointer;
+}
+input[type=range].slider{width:100%;accent-color:var(--signal);margin:0}
+.thumbs{display:flex;gap:6px;overflow-x:auto;padding:10px 12px;background:#F4F7F9;border-top:1px solid var(--rule)}
+.thumbs img{height:52px;border-radius:5px;border:2px solid transparent;cursor:pointer;background:#fff;flex:none}
+.thumbs img[data-cur="1"]{border-color:var(--signal)}
+.lightbox{
+  position:fixed;inset:0;background:rgba(10,15,20,.94);z-index:99;display:grid;place-items:center;padding:16px;
+}
+.lightbox img{max-width:100%;max-height:88vh}
+.lightbox button{position:absolute;top:16px;right:16px;font-size:15px;padding:10px 16px;border-radius:8px;border:0;background:#fff;cursor:pointer;font-family:Anuphan,sans-serif}
+
+/* ---- หน้าคะแนนรวม ---- */
+.podium{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+@media (max-width:640px){.podium{grid-template-columns:1fr}}
+.pod{border:1px solid var(--rule);border-radius:10px;padding:16px;text-align:center;background:#F7F9FB}
+.pod.p1{background:linear-gradient(#FFF8E3,#FFFDF6);border-color:#EBD289}
+.pod .medal{font-size:26px;line-height:1}
+.pod .nm{font-family:Anuphan,sans-serif;font-weight:700;font-size:16px;margin:6px 0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pod .sc{font-family:"IBM Plex Mono",monospace;font-size:22px;font-weight:600}
+.pod .sub2{font-size:12px;color:var(--muted)}
+.pod .facerow{justify-content:center;margin:8px 0 0}
+.gridscroll{overflow-x:auto}
+table.matrix{border-collapse:collapse;font-size:12px;min-width:100%}
+table.matrix th,table.matrix td{border:1px solid var(--rule);padding:5px 6px;text-align:center;white-space:nowrap}
+table.matrix th:first-child,table.matrix td:first-child{text-align:left;position:sticky;left:0;background:#fff;z-index:1;font-size:13px}
+table.matrix th{background:#F1F5F9;font-family:"IBM Plex Mono",monospace;font-size:11px}
+table.matrix td.pass{background:#E8F4EC;color:var(--ok);font-weight:600}
+table.matrix td.gold{background:#FFF3D4;color:#8A5B00;font-weight:600}
+body.projector .wrap{max-width:1600px}
+body.projector table.board{font-size:19px}
+body.projector .pod .sc{font-size:34px}
+body.projector .pod .nm{font-size:22px}

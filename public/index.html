@@ -25,6 +25,7 @@
       <div class="roleswitch">
         <button id="btnTeam" aria-pressed="true">ทีมนักเรียน</button>
         <button id="btnTeacher" aria-pressed="false">ครู</button>
+        <button id="btnScore" aria-pressed="false">คะแนนรวม</button>
       </div>
     </div>
   </header>
@@ -67,6 +68,29 @@
       <p class="eyebrow">สดจากกระดานครู</p>
       <h2 id="rankTitle">อันดับของใบงานนี้</h2>
       <div id="rankBody"></div>
+    </div>
+  </section>
+
+  <section id="viewScore" class="hide">
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div>
+          <p class="eyebrow">อัปเดตสดทุกครั้งที่ครูกดผ่าน</p>
+          <h2>ตารางคะแนนรวม</h2>
+          <p class="sub" style="margin-bottom:0">ฉายหน้านี้ขึ้นจอหน้าห้องได้เลย ทุกทีมเห็นอันดับตัวเองตลอดเวลา</p>
+        </div>
+        <button class="btn ghost sm" id="btnFull">เต็มจอ</button>
+      </div>
+      <div class="hr"></div>
+      <div id="podium"></div>
+      <div id="scoreTable"></div>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">รายใบงาน</p>
+      <h2>ใครผ่านใบงานไหนแล้วบ้าง</h2>
+      <p class="sub">ตัวเลขในช่องคืออันดับที่ทำได้ในใบงานนั้น ช่องสีทองคือทำภารกิจเสริมสำเร็จด้วย</p>
+      <div class="gridscroll"><div id="matrixTable"></div></div>
     </div>
   </section>
 
